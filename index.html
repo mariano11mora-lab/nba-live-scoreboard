@@ -52,6 +52,8 @@
     @keyframes up { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
     .card:hover { border-color:#2a2a3e; transform:translateY(-2px) }
     .card.is-live { border-color:rgba(255,59,59,.45); box-shadow:0 0 22px rgba(255,59,59,.07) }
+    .card.clutch  { border-color:rgba(255,59,59,.8);  box-shadow:0 0 18px rgba(255,59,59,.15) }
+    .game-time-center.clutch { font-size:1.2rem; color:#ff3b3b; letter-spacing:.18em }
 
     .pill { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:99px; font-family:'DM Mono',monospace; font-size:.58rem; font-weight:500; letter-spacing:.1em; text-transform:uppercase; width:fit-content }
     .pill-live  { background:rgba(255,59,59,.1);    color:var(--red);    border:1px solid rgba(255,59,59,.28) }
@@ -261,6 +263,21 @@ function fmtClock(iso) {
   return m ? m[1]+':'+String(Math.floor(+m[2])).padStart(2,'0') : '';
 }
 
+function clockToSeconds(iso) {
+  const m = (iso||'').match(/PT(\d+)M([\d.]+)S/);
+  return m ? parseInt(m[1])*60 + Math.floor(parseFloat(m[2])) : 999;
+}
+
+function isClutch(game) {
+  if (game.gameStatus !== 2) return false;
+  const diff = Math.abs((game.awayScore ?? 0) - (game.homeScore ?? 0));
+  if (diff >= 10) return false;
+  const p = game.period ?? 0;
+  if (p > 4) return true;
+  if (p === 4 && clockToSeconds(game.gameClock) <= 300) return true;
+  return false;
+}
+
 function pillHTML(info, g) {
   const cls = { live:'pill-live', final:'pill-final', soon:'pill-soon' }[info.type];
   const label = { live:'En Vivo', final:'Finalizado', soon:'Programado' }[info.type];
@@ -281,16 +298,17 @@ function quartersHTML(awayPeriods, homePeriods, info) {
 }
 
 function buildCard(game, idx) {
-  const info = statusInfo(game);
-  const away = game.awayTeam, home = game.homeTeam;
-  const as_  = game.awayScore, hs = game.homeScore;
-  const fin  = info.type==='final';
-  const hW   = fin && hs > as_, aW = fin && as_ > hs;
-  const delay = (idx * 0.055).toFixed(2);
+  const info    = statusInfo(game);
+  const away    = game.awayTeam, home = game.homeTeam;
+  const as_     = game.awayScore, hs = game.homeScore;
+  const fin     = info.type==='final';
+  const hW      = fin && hs > as_, aW = fin && as_ > hs;
+  const delay   = (idx * 0.055).toFixed(2);
+  const clutch  = isClutch(game);
 
   // A) Tiempo de juego — solo en vivo, centrado arriba del bloque
   const gameTimeHTML = info.type==='live'
-    ? `<div class="game-time-center">P${game.period} · ${fmtClock(game.gameClock)}</div>`
+    ? `<div class="game-time-center${clutch?' clutch':''}">P${game.period} · ${fmtClock(game.gameClock)}</div>`
     : '';
 
   // B) Records row — siempre visible
@@ -342,7 +360,7 @@ function buildCard(game, idx) {
   }
 
   return `
-  <div class="card${info.type==='live'?' is-live':''}" style="animation-delay:${delay}s" data-id="${game.gameId}">
+  <div class="card${info.type==='live'?' is-live':''}${clutch?' clutch':''}" style="animation-delay:${delay}s" data-id="${game.gameId}">
 
     <div class="card-top">${pillHTML(info, game)}</div>
 
@@ -403,8 +421,8 @@ function renderGames(games, first) {
     return;
   }
 
-  const order = {live:0,soon:1,final:2};
-  const sorted = [...games].sort((a,b) => order[statusInfo(a).type] - order[statusInfo(b).type]);
+  const statusOrder = g => g.gameStatus === 2 ? 0 : g.gameStatus === 1 ? 1 : 2;
+  const sorted = [...games].sort((a,b) => statusOrder(a) - statusOrder(b));
   const grid = document.getElementById('grid');
 
   if (first) {
