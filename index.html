@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NBA Live · Scores</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:#0a0a0f; --surface:#111118; --border:#1e1e2e;
+      --accent:#c8ff00; --red:#ff3b3b; --text:#e8e8f0; --muted:#5a5a72;
+    }
+    *, *::before, *::after { box-sizing:border-box; margin:0; padding:0 }
+    body { background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif; min-height:100vh }
+    body::before {
+      content:''; position:fixed; inset:0;
+      background-image:
+        linear-gradient(rgba(200,255,0,.025) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(200,255,0,.025) 1px,transparent 1px);
+      background-size:44px 44px; pointer-events:none; z-index:0
+    }
+    header {
+      position:relative; z-index:1;
+      display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+      padding:26px 36px 18px; border-bottom:1px solid var(--border)
+    }
+    .logo { font-family:'Bebas Neue',cursive; font-size:2rem; letter-spacing:.1em; color:var(--accent); text-shadow:0 0 28px rgba(200,255,0,.3) }
+    .logo em { color:var(--text); font-style:normal }
+    .header-right { display:flex; align-items:center; gap:14px; flex-wrap:wrap }
+    #clock { font-family:'DM Mono',monospace; font-size:.72rem; color:var(--muted); letter-spacing:.07em }
+    .live-badge { display:flex; align-items:center; gap:6px; font-family:'DM Mono',monospace; font-size:.65rem; color:var(--muted); letter-spacing:.06em }
+    .pulse { width:7px; height:7px; border-radius:50%; background:var(--accent); animation:blink 2s ease-in-out infinite }
+    @keyframes blink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.35;transform:scale(.7)} }
+
+    /* Mock badge */
+    #mock-badge {
+      font-family:'DM Mono',monospace; font-size:.6rem; letter-spacing:.05em;
+      padding:2px 10px; border-radius:6px;
+      border:1px solid rgba(200,255,0,.2); color:var(--accent);
+      background: rgba(200,255,0,.05);
+    }
+
+    main { position:relative; z-index:1; max-width:980px; margin:0 auto; padding:34px 22px 64px }
+    .section-label { font-family:'DM Mono',monospace; font-size:.62rem; color:var(--muted); letter-spacing:.2em; text-transform:uppercase; margin-bottom:22px }
+
+    #state-wrap { display:none; flex-direction:column; align-items:center; justify-content:center; gap:16px; min-height:220px }
+    #state-wrap.show { display:flex }
+    .spinner { width:34px; height:34px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .75s linear infinite }
+    @keyframes spin { to { transform:rotate(360deg) } }
+    #state-msg { font-family:'DM Mono',monospace; font-size:.75rem; color:var(--muted); letter-spacing:.06em; text-align:center }
+
+    #grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:16px }
+
+    .card {
+      background:var(--surface); border:1px solid var(--border); border-radius:14px;
+      padding:18px 16px 14px; display:flex; flex-direction:column; gap:12px;
+      transition:border-color .2s, transform .2s; animation:up .38s ease both
+    }
+    @keyframes up { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+    .card:hover { border-color:#2a2a3e; transform:translateY(-2px) }
+    .card.is-live { border-color:rgba(255,59,59,.45); box-shadow:0 0 22px rgba(255,59,59,.07) }
+
+    .pill { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:99px; font-family:'DM Mono',monospace; font-size:.58rem; font-weight:500; letter-spacing:.1em; text-transform:uppercase; width:fit-content }
+    .pill-live  { background:rgba(255,59,59,.1);    color:var(--red);    border:1px solid rgba(255,59,59,.28) }
+    .pill-final { background:rgba(200,255,0,.07);   color:var(--accent); border:1px solid rgba(200,255,0,.2) }
+    .pill-soon  { background:rgba(255,255,255,.04); color:var(--muted);  border:1px solid var(--border) }
+
+    /* Horario de inicio — solo en partidos programados, centrado bajo los equipos */
+    .tipoff-block {
+      display:flex; flex-direction:column; align-items:center; gap:4px;
+      padding:10px 0 4px;
+    }
+    .tipoff-label {
+      font-family:'DM Mono',monospace; font-size:.58rem; color:var(--muted);
+      letter-spacing:.18em; text-transform:uppercase;
+    }
+    .tipoff-time {
+      font-family:'Bebas Neue',cursive; font-size:2.2rem; letter-spacing:.08em;
+      color:var(--text); line-height:1;
+    }
+    .tipoff-tz {
+      font-family:'DM Mono',monospace; font-size:.55rem; color:var(--muted);
+      letter-spacing:.1em;
+    }
+    .pill-live::before { content:''; width:5px; height:5px; border-radius:50%; background:var(--red); animation:blink 1.2s ease-in-out infinite }
+
+    /* ── CARD LAYOUT ── */
+    .card-top { margin-bottom:0 }
+    .period-info { display:none }
+    .tname { display:none }
+
+    /* Tiempo de juego: centrado, encima de todo el contenido */
+    .game-time-center {
+      text-align:center;
+      font-family:'DM Mono',monospace; font-size:1rem; font-weight:500;
+      color:var(--red); letter-spacing:.14em; text-transform:uppercase;
+      line-height:1; margin-bottom:6px;
+    }
+
+    /* Records row: mismo grid que .matchup para alinear ejes */
+    .records-row {
+      display:grid; grid-template-columns:1fr auto 1fr; gap:8px;
+    }
+    .records-row.centered { display:flex; justify-content:center; gap:32px }
+    .rec-away { font-family:'DM Mono',monospace; font-size:.65rem; color:#9090a8; letter-spacing:.04em; text-align:left }
+    .rec-mid  { visibility:hidden } /* columna fantasma para alinear con el score */
+    .rec-home { font-family:'DM Mono',monospace; font-size:.65rem; color:#e8e8f0; letter-spacing:.04em; text-align:right }
+    .records-row.centered .rec-away,
+    .records-row.centered .rec-home { text-align:center }
+
+    /* Matchup: [AWAY]  [SCORE]  [HOME] en una sola línea */
+    .matchup { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:8px }
+    .team { display:flex; align-items:center }
+    .team.away { justify-content:flex-start }
+    .team.home { justify-content:flex-end }
+
+    /* Partidos programados: tricodes más juntos y centrados */
+    .matchup-soon { display:flex; align-items:center; justify-content:center; gap:28px }
+    .matchup-soon .team { justify-content:center }
+
+    .tricode { font-family:'Bebas Neue',cursive; font-size:2.6rem; letter-spacing:.05em; line-height:1 }
+    .record { display:none } /* record movido a .records-row */
+
+    /* Away: gris visible / Home: blanco */
+    .tc-away { color:#9090a8 }
+    .tc-home { color:#e8e8f0 }
+
+    /* Score block: solo los números, sin clock (clock va arriba separado) */
+    .score-block { display:flex; align-items:center; justify-content:center }
+    .score-pair  { display:flex; align-items:center; gap:4px }
+    .sc  { font-family:'Bebas Neue',cursive; font-size:2.6rem; letter-spacing:.04em; line-height:1; color:var(--text) }
+    .sc.w { color:var(--accent) }
+    .sep { font-family:'Bebas Neue',cursive; font-size:1.6rem; color:#2e2e46; line-height:1 }
+    .vs-lbl { font-family:'DM Mono',monospace; font-size:.75rem; color:var(--muted) }
+    .game-clock { display:none } /* reemplazado por .game-time-center */
+
+    /* Score flash on update */
+    .sc.flash { animation: scoreflash .5s ease }
+    @keyframes scoreflash { 0%{color:#fff} 100%{color:inherit} }
+
+    /* Quarters: horizontal, centrado, separadores entre columnas */
+    .quarters {
+      display:flex; gap:0; justify-content:center;
+      border-top:1px solid var(--border); padding-top:10px;
+    }
+    .q-col {
+      display:flex; flex-direction:column; align-items:center; gap:3px;
+      flex:1; max-width:56px;
+      border-right:1px solid var(--border);
+    }
+    .q-col:last-child { border-right:none }
+    .q-head  { font-family:'DM Mono',monospace; font-size:.5rem; color:#4a4a62; letter-spacing:.06em; text-transform:uppercase }
+    .q-score { font-family:'DM Mono',monospace; font-size:.6rem; color:var(--muted) }
+    .q-score.cur { color:var(--text) }
+
+    /* stat-bar */
+    .stat-bar { display:flex; justify-content:center; align-items:center; gap:8px; font-family:'DM Mono',monospace; font-size:.6rem; color:var(--muted); letter-spacing:.06em }
+    .stat-bar .stat-val { color:var(--text); font-size:.65rem }
+    .stat-bar .stat-val.pos { color:var(--accent) }
+    .stat-bar .stat-val.neg { color:#ff6b6b }
+    .stat-bar .stat-sep { color:var(--border) }
+
+    /* Last update ticker */
+    #last-update { font-family:'DM Mono',monospace; font-size:.58rem; color:var(--muted); letter-spacing:.05em; margin-bottom:16px }
+    #last-update span { color: var(--accent) }
+
+    #bar { position:fixed; bottom:0; left:0; height:2px; background:var(--accent); opacity:.55; transition:width 1s linear; z-index:10 }
+
+    @media(max-width:580px){ header{padding:18px 16px 14px} .logo{font-size:1.65rem} main{padding:22px 12px 44px} }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">NBA<em>·</em>Live</div>
+  <div class="header-right">
+    <span id="mock-badge">⚡ MOCK DATA</span>
+    <div class="live-badge"><span class="pulse"></span>auto-refresh 30s</div>
+    <div id="clock">—</div>
+  </div>
+</header>
+
+<main>
+  <p class="section-label" id="date-label">Partidos de hoy</p>
+  <p id="last-update" style="display:none">Última actualización: <span id="update-time">—</span></p>
+
+  <div id="state-wrap" class="show">
+    <div class="spinner"></div>
+    <p id="state-msg">Generando partidos…</p>
+  </div>
+
+  <div id="grid"></div>
+</main>
+
+<div id="bar" style="width:100%"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   MOTOR DE DATOS MOCK — NBA Live Scores Simulator
+   ═══════════════════════════════════════════════════════════
+   - Estado global persistente entre refreshes
+   - Partidos "live" evolucionan de forma realista
+   - Scores aumentan gradualmente, quarters avanzan
+   - No se resetea nada entre ciclos de 30s
+*/
+
+const REFRESH = 30000;
+
+/* ── Catálogo de equipos ── */
+const TEAMS = [
+  { tricode:'LAL', name:'Los Angeles Lakers',     city:'Los Angeles',  wins:37, losses:26, conf:'West' },
+  { tricode:'BOS', name:'Boston Celtics',          city:'Boston',       wins:46, losses:17, conf:'East' },
+  { tricode:'GSW', name:'Golden State Warriors',   city:'San Francisco',wins:31, losses:33, conf:'West' },
+  { tricode:'MIA', name:'Miami Heat',              city:'Miami',        wins:33, losses:30, conf:'East' },
+  { tricode:'DEN', name:'Denver Nuggets',          city:'Denver',       wins:43, losses:20, conf:'West' },
+  { tricode:'NYK', name:'New York Knicks',         city:'New York',     wins:38, losses:25, conf:'East' },
+  { tricode:'PHX', name:'Phoenix Suns',            city:'Phoenix',      wins:29, losses:34, conf:'West' },
+  { tricode:'MIL', name:'Milwaukee Bucks',         city:'Milwaukee',    wins:35, losses:28, conf:'East' },
+  { tricode:'DAL', name:'Dallas Mavericks',        city:'Dallas',       wins:36, losses:27, conf:'West' },
+  { tricode:'PHI', name:'Philadelphia 76ers',      city:'Philadelphia', wins:30, losses:33, conf:'East' },
+  { tricode:'CLE', name:'Cleveland Cavaliers',     city:'Cleveland',    wins:44, losses:19, conf:'East' },
+  { tricode:'OKC', name:'Oklahoma City Thunder',   city:'Oklahoma City',wins:45, losses:18, conf:'West' },
+  { tricode:'MIN', name:'Minnesota Timberwolves',  city:'Minneapolis',  wins:40, losses:23, conf:'West' },
+  { tricode:'IND', name:'Indiana Pacers',          city:'Indianapolis', wins:35, losses:28, conf:'East' },
+  { tricode:'SAS', name:'San Antonio Spurs',       city:'San Antonio',  wins:18, losses:45, conf:'West' },
+  { tricode:'TOR', name:'Toronto Raptors',         city:'Toronto',      wins:17, losses:46, conf:'East' },
+  { tricode:'SAC', name:'Sacramento Kings',        city:'Sacramento',   wins:30, losses:33, conf:'West' },
+  { tricode:'ATL', name:'Atlanta Hawks',           city:'Atlanta',      wins:26, losses:37, conf:'East' },
+  { tricode:'CHI', name:'Chicago Bulls',           city:'Chicago',      wins:24, losses:39, conf:'East' },
+  { tricode:'NOP', name:'New Orleans Pelicans',    city:'New Orleans',  wins:22, losses:41, conf:'West' },
+];
+
+/* ── Arenas ── */
+const ARENAS = {
+  LAL:'Crypto.com Arena', BOS:'TD Garden', GSW:'Chase Center',
+  MIA:'Kaseya Center', DEN:'Ball Arena', NYK:'Madison Square Garden',
+  PHX:'Footprint Center', MIL:'Fiserv Forum', DAL:'American Airlines Center',
+  PHI:'Wells Fargo Center', CLE:'Rocket Mortgage FieldHouse', OKC:'Paycom Center',
+  MIN:'Target Center', IND:'Gainbridge Fieldhouse', SAS:'Frost Bank Center',
+  TOR:'Scotiabank Arena', SAC:'Golden 1 Center', ATL:'State Farm Arena',
+  CHI:'United Center', NOP:'Smoothie King Center',
+};
+
+/* ── Utilidades ── */
+const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+const pick  = arr => arr[Math.floor(Math.random() * arr.length)];
+
+function todayStr() {
+  const d = new Date();
+  return d.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+
+/* ── Generar cuartos realistas ── */
+function genQuarters(total, n) {
+  // Distribuye `total` puntos en `n` cuartos de forma realista (24-32 por cuarto)
+  const qs = [];
+  let rem = total;
+  for (let i = 0; i < n; i++) {
+    const isLast = i === n - 1;
+    const base = isLast ? rem : rand(22, Math.min(34, rem - (n - i - 1) * 18));
+    qs.push(Math.max(base, 0));
+    rem -= qs[i];
+  }
+  return qs;
+}
+
+/* ── Estado global de partidos (persiste entre refreshes) ── */
+let STATE = null;
+
+function initState() {
+  // Seleccionar N equipos sin repetir y armar N/2 matchups
+  const shuffled = [...TEAMS].sort(() => Math.random() - 0.5);
+  const count = rand(5, 10); // entre 5 y 10 partidos
+  const pairs = Math.min(count, Math.floor(shuffled.length / 2));
+
+  const now = new Date();
+
+  const games = [];
+  for (let i = 0; i < pairs; i++) {
+    const away = shuffled[i * 2];
+    const home = shuffled[i * 2 + 1];
+
+    // Distribución de estados: ~30% live, ~30% soon, ~40% final
+    const roll = Math.random();
+    let status, gameData;
+
+    if (roll < 0.30) {
+      // ── EN VIVO ──
+      const period = rand(1, 4);
+      const minLeft = rand(0, 11);
+      const secLeft = rand(0, 59);
+
+      // Puntajes coherentes con el período
+      const baseScore = period * rand(22, 30);
+      const awayTotal = baseScore + rand(-8, 8);
+      const homeTotal = baseScore + rand(-8, 8);
+
+      // Cuartos completados
+      const awayQs = genQuarters(awayTotal, period);
+      const homeQs = genQuarters(homeTotal, period);
+
+      gameData = {
+        gameStatus: 2,
+        period,
+        gameClock: `PT${String(minLeft).padStart(2,'0')}M${String(secLeft).padStart(2,'0')}.00S`,
+        awayScore: awayTotal,
+        homeScore: homeTotal,
+        awayPeriods: awayQs,
+        homePeriods: homeQs,
+        // Velocidad de scoring: puntos por tick (30s) por equipo
+        awayRate: rand(2, 5),
+        homeRate: rand(2, 5),
+        minLeft, secLeft,
+      };
+    } else if (roll < 0.60) {
+      // ── PROGRAMADO ──
+      const hoursAhead = rand(1, 5);
+      const tipoff = new Date(now.getTime() + hoursAhead * 3600000);
+      gameData = {
+        gameStatus: 1,
+        gameTimeUTC: tipoff.toISOString(),
+        awayScore: 0, homeScore: 0,
+        awayPeriods: [], homePeriods: [],
+      };
+    } else {
+      // ── FINALIZADO ──
+      const awayFinal = rand(88, 126);
+      const homeFinal = rand(88, 126);
+      const awayQs = genQuarters(awayFinal, 4);
+      const homeQs = genQuarters(homeFinal, 4);
+      gameData = {
+        gameStatus: 3,
+        period: 4,
+        awayScore: awayFinal,
+        homeScore: homeFinal,
+        awayPeriods: awayQs,
+        homePeriods: homeQs,
+      };
+    }
+
+    games.push({
+      gameId: 'mock_' + i,
+      gameCode: todayStr().replace(/\//g,'') + '/' + away.tricode + home.tricode,
+      arenaName: ARENAS[home.tricode] || home.city,
+      arenaCity: home.city,
+      awayTeam: away,
+      homeTeam: home,
+      ...gameData,
+    });
+  }
+
+  // Garantizar al menos 1 partido programado para que siempre sea visible en el mock
+  const hasSoon = games.some(g => g.gameStatus === 1);
+  if (!hasSoon) {
+    // Tomar los dos equipos siguientes del shuffle (posiciones pairs*2 y pairs*2+1)
+    const idx1 = (pairs * 2) % shuffled.length;
+    const idx2 = (pairs * 2 + 1) % shuffled.length;
+    const soonAway = shuffled[idx1];
+    const soonHome = shuffled[idx2 !== idx1 ? idx2 : (idx2 + 1) % shuffled.length];
+    const hoursAhead = rand(1, 4);
+    const tipoff = new Date(now.getTime() + hoursAhead * 3600000);
+    games.push({
+      gameId: 'mock_soon',
+      gameCode: todayStr().replace(/\//g,'') + '/' + soonAway.tricode + soonHome.tricode,
+      arenaName: ARENAS[soonHome.tricode] || soonHome.city,
+      arenaCity: soonHome.city,
+      awayTeam: soonAway,
+      homeTeam: soonHome,
+      gameStatus: 1,
+      gameTimeUTC: tipoff.toISOString(),
+      awayScore: 0, homeScore: 0,
+      awayPeriods: [], homePeriods: [],
+    });
+  }
+
+  STATE = { games, tick: 0, date: todayStr() };
+}
+
+/* ── Tick: evolucionar partidos en vivo ── */
+function tickState() {
+  if (!STATE) return;
+  STATE.tick++;
+
+  for (const g of STATE.games) {
+    if (g.gameStatus !== 2) continue;
+
+    // Añadir puntos de forma realista
+    const awayAdd = rand(0, g.awayRate);
+    const homeAdd = rand(0, g.homeRate);
+    g.awayScore += awayAdd;
+    g.homeScore += homeAdd;
+
+    // Actualizar cuarto activo
+    const qi = g.period - 1;
+    if (g.awayPeriods[qi] !== undefined) g.awayPeriods[qi] += awayAdd;
+    else g.awayPeriods.push(awayAdd);
+    if (g.homePeriods[qi] !== undefined) g.homePeriods[qi] += homeAdd;
+    else g.homePeriods.push(homeAdd);
+
+    // Avanzar reloj (restar ~30s)
+    g.secLeft -= 30;
+    if (g.secLeft < 0) {
+      g.minLeft--;
+      g.secLeft += 60;
+    }
+    if (g.minLeft < 0) {
+      // Cambiar de período o finalizar
+      if (g.period < 4) {
+        g.period++;
+        g.minLeft = 11;
+        g.secLeft = 59;
+        g.awayRate = rand(2, 5);
+        g.homeRate = rand(2, 5);
+        g.awayPeriods.push(0);
+        g.homePeriods.push(0);
+      } else {
+        // Partido terminado
+        g.gameStatus = 3;
+        g.minLeft = 0;
+        g.secLeft = 0;
+      }
+    }
+
+    // Reconstruir gameClock
+    g.gameClock = `PT${String(Math.max(g.minLeft,0)).padStart(2,'0')}M${String(Math.max(g.secLeft,0)).padStart(2,'0')}.00S`;
+  }
+}
+
+/* ══════════════════════════════════════
+   RENDER (reutiliza la lógica original)
+══════════════════════════════════════ */
+
+function statusInfo(g) {
+  if (g.gameStatus === 2) return { type:'live',  label:'En Vivo' };
+  if (g.gameStatus === 3) return { type:'final', label:'Finalizado' };
+  if (g.gameTimeUTC) {
+    const t = new Date(g.gameTimeUTC).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+    return { type:'soon', label: t + ' hs' };
+  }
+  return { type:'soon', label:'Programado' };
+}
+
+function fmtClock(iso) {
+  const m = (iso||'').match(/PT(\d+)M([\d.]+)S/);
+  return m ? m[1]+':'+String(Math.floor(+m[2])).padStart(2,'0') : '';
+}
+
+function pillHTML(info, g) {
+  const cls = { live:'pill-live', final:'pill-final', soon:'pill-soon' }[info.type];
+  const label = { live:'En Vivo', final:'Finalizado', soon:'Programado' }[info.type];
+  return `<span class="pill ${cls}">${label}</span>`;
+}
+
+function quartersHTML(awayPeriods, homePeriods, info) {
+  if (!awayPeriods.length || info.type==='soon') return '';
+  return '<div class="quarters">' +
+    awayPeriods.map((_, i) => {
+      const cur = info.type==='live' && i===awayPeriods.length-1;
+      const cls = cur ? ' cur' : '';
+      return `<div class="q-col">
+        <span class="q-head">Q${i+1}</span>
+        <span class="q-score${cls}">${awayPeriods[i]??'—'}–${homePeriods[i]??'—'}</span>
+      </div>`;
+    }).join('') + '</div>';
+}
+
+function buildCard(game, idx) {
+  const info = statusInfo(game);
+  const away = game.awayTeam, home = game.homeTeam;
+  const as_  = game.awayScore, hs = game.homeScore;
+  const fin  = info.type==='final';
+  const hW   = fin && hs > as_, aW = fin && as_ > hs;
+  const delay = (idx * 0.055).toFixed(2);
+
+  // A) Tiempo de juego — solo en vivo, centrado arriba del bloque
+  const gameTimeHTML = info.type==='live'
+    ? `<div class="game-time-center">P${game.period} · ${fmtClock(game.gameClock)}</div>`
+    : '';
+
+  // B) Records row — siempre visible
+  const hasScore = info.type !== 'soon';
+  const recCls = info.type==='soon' ? ' centered' : '';
+  const recordsHTML = `<div class="records-row${recCls}">
+    <span class="rec-away">${away.wins}–${away.losses}</span>
+    ${info.type!=='soon' ? '<span class="rec-mid">·</span>' : ''}
+    <span class="rec-home">${home.wins}–${home.losses}</span>
+  </div>`;
+
+  // C) Score center block — para soon: centro vacío (el horario va abajo separado)
+  const center = info.type==='soon'
+    ? '<div class="score-block"></div>'
+    : `<div class="score-block"><div class="score-pair">
+         <span class="sc${aW?' w':''}">${as_}</span>
+         <span class="sep">–</span>
+         <span class="sc${hW?' w':''}">${hs}</span>
+       </div></div>`;
+
+  // Horario de inicio — solo para partidos programados, en hora argentina
+  const tipoffHTML = info.type==='soon' && game.gameTimeUTC
+    ? (() => {
+        const d = new Date(game.gameTimeUTC);
+        const hora = d.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit', timeZone:'America/Argentina/Buenos_Aires' });
+        const fecha = d.toLocaleDateString('es-AR', { weekday:'short', day:'numeric', month:'short', timeZone:'America/Argentina/Buenos_Aires' });
+        return `<div class="tipoff-block">
+          <span class="tipoff-label">Inicio</span>
+          <span class="tipoff-time">${hora}</span>
+          <span class="tipoff-tz">${fecha} · ARG</span>
+        </div>`;
+      })()
+    : '';
+
+  // D) Stat bar
+  let statHTML = '';
+  if (hasScore) {
+    const diff = as_ - hs;
+    const leader = diff > 0 ? away.tricode : (diff < 0 ? home.tricode : null);
+    const diffCls = diff > 0 ? 'pos' : (diff < 0 ? 'neg' : '');
+    const sign = diff > 0 ? '+' : '';
+    const total = as_ + hs;
+    statHTML = `<div class="stat-bar">
+      <span>${leader ? leader+' lidera' : 'Empate'}</span>
+      ${leader ? `<span class="stat-val ${diffCls}">${sign}${diff}</span>` : ''}
+      <span class="stat-sep">·</span>
+      <span>Total: <span class="stat-val">${total}</span></span>
+    </div>`;
+  }
+
+  return `
+  <div class="card${info.type==='live'?' is-live':''}" style="animation-delay:${delay}s" data-id="${game.gameId}">
+
+    <div class="card-top">${pillHTML(info, game)}</div>
+
+    ${gameTimeHTML}
+
+    ${recordsHTML}
+
+    <div class="${info.type==='soon' ? 'matchup-soon' : 'matchup'}">
+      <div class="team away"><div class="tricode tc-away">${away.tricode}</div></div>
+      ${center}
+      <div class="team home"><div class="tricode tc-home">${home.tricode}</div></div>
+    </div>
+
+    ${tipoffHTML}
+
+    ${hasScore ? quartersHTML(game.awayPeriods, game.homePeriods, info) : ''}
+
+    ${statHTML}
+  </div>`;
+}
+
+/* ── Countdown bar ── */
+let cd = REFRESH/1000, timerInt, fetchInt;
+
+function startBar() {
+  clearInterval(timerInt);
+  cd = REFRESH/1000;
+  const bar = document.getElementById('bar');
+  bar.style.width = '100%';
+  timerInt = setInterval(() => {
+    bar.style.width = (--cd / (REFRESH/1000) * 100) + '%';
+    if (cd <= 0) clearInterval(timerInt);
+  }, 1000);
+}
+
+/* ── Reloj ── */
+const tickClock = () =>
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+setInterval(tickClock, 1000); tickClock();
+
+/* ── Render principal ── */
+function render(first=false) {
+  const games = STATE.games;
+
+  document.getElementById('date-label').textContent = 'Partidos · ' + STATE.date;
+
+  // Ocultar loading
+  document.getElementById('state-wrap').classList.remove('show');
+
+  // Mostrar timestamp
+  const upEl = document.getElementById('last-update');
+  const upTime = document.getElementById('update-time');
+  upEl.style.display = 'block';
+  upTime.textContent = new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+  // Orden: live → soon → final
+  const order = {live:0,soon:1,final:2};
+  const sorted = [...games].sort((a,b) => order[statusInfo(a).type] - order[statusInfo(b).type]);
+
+  if (first) {
+    // Primera carga: animar todo
+    document.getElementById('grid').innerHTML = sorted.map((g,i) => buildCard(g,i)).join('');
+  } else {
+    // Refreshes siguientes: actualizar solo las cards existentes sin re-animar
+    const grid = document.getElementById('grid');
+    const existing = new Map([...grid.querySelectorAll('.card')].map(el => [el.dataset.id, el]));
+
+    // Reconstruir con nuevo orden, preservando las que no cambiaron
+    const newHTML = sorted.map((g, i) => {
+      const newCard = document.createElement('div');
+      newCard.innerHTML = buildCard(g, i);
+      const card = newCard.firstElementChild;
+      // Quitar animación en refreshes
+      card.style.animationDelay = '0s';
+      card.style.animation = 'none';
+      return card.outerHTML;
+    }).join('');
+
+    grid.innerHTML = newHTML;
+  }
+}
+
+/* ── Ciclo principal ── */
+function tick(first=false) {
+  if (first) {
+    initState();
+  } else {
+    tickState(); // evolucionar partidos en vivo
+  }
+  render(first);
+  startBar();
+}
+
+// Arrancar con delay de 600ms para que se vea el spinner brevemente
+setTimeout(() => {
+  tick(true);
+  clearInterval(fetchInt);
+  fetchInt = setInterval(() => tick(false), REFRESH);
+}, 600);
+</script>
+</body>
+</html>
