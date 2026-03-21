@@ -33,14 +33,6 @@
     .pulse { width:7px; height:7px; border-radius:50%; background:var(--accent); animation:blink 2s ease-in-out infinite }
     @keyframes blink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.35;transform:scale(.7)} }
 
-    /* Mock badge */
-    #mock-badge {
-      font-family:'DM Mono',monospace; font-size:.6rem; letter-spacing:.05em;
-      padding:2px 10px; border-radius:6px;
-      border:1px solid rgba(200,255,0,.2); color:var(--accent);
-      background: rgba(200,255,0,.05);
-    }
-
     main { position:relative; z-index:1; max-width:980px; margin:0 auto; padding:34px 22px 64px }
     .section-label { font-family:'DM Mono',monospace; font-size:.62rem; color:var(--muted); letter-spacing:.2em; text-transform:uppercase; margin-bottom:22px }
 
@@ -175,7 +167,6 @@
 <header>
   <div class="logo">NBA<em>·</em>Live</div>
   <div class="header-right">
-    <span id="mock-badge">⚡ MOCK DATA</span>
     <div class="live-badge"><span class="pulse"></span>auto-refresh 30s</div>
     <div id="clock">—</div>
   </div>
@@ -196,235 +187,59 @@
 <div id="bar" style="width:100%"></div>
 
 <script>
-/* ═══════════════════════════════════════════════════════════
-   MOTOR DE DATOS MOCK — NBA Live Scores Simulator
-   ═══════════════════════════════════════════════════════════
-   - Estado global persistente entre refreshes
-   - Partidos "live" evolucionan de forma realista
-   - Scores aumentan gradualmente, quarters avanzan
-   - No se resetea nada entre ciclos de 30s
-*/
+const NBA_URL = 'https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json';
+const REFRESH  = 30000;
 
-const REFRESH = 30000;
-
-/* ── Catálogo de equipos ── */
-const TEAMS = [
-  { tricode:'LAL', name:'Los Angeles Lakers',     city:'Los Angeles',  wins:37, losses:26, conf:'West' },
-  { tricode:'BOS', name:'Boston Celtics',          city:'Boston',       wins:46, losses:17, conf:'East' },
-  { tricode:'GSW', name:'Golden State Warriors',   city:'San Francisco',wins:31, losses:33, conf:'West' },
-  { tricode:'MIA', name:'Miami Heat',              city:'Miami',        wins:33, losses:30, conf:'East' },
-  { tricode:'DEN', name:'Denver Nuggets',          city:'Denver',       wins:43, losses:20, conf:'West' },
-  { tricode:'NYK', name:'New York Knicks',         city:'New York',     wins:38, losses:25, conf:'East' },
-  { tricode:'PHX', name:'Phoenix Suns',            city:'Phoenix',      wins:29, losses:34, conf:'West' },
-  { tricode:'MIL', name:'Milwaukee Bucks',         city:'Milwaukee',    wins:35, losses:28, conf:'East' },
-  { tricode:'DAL', name:'Dallas Mavericks',        city:'Dallas',       wins:36, losses:27, conf:'West' },
-  { tricode:'PHI', name:'Philadelphia 76ers',      city:'Philadelphia', wins:30, losses:33, conf:'East' },
-  { tricode:'CLE', name:'Cleveland Cavaliers',     city:'Cleveland',    wins:44, losses:19, conf:'East' },
-  { tricode:'OKC', name:'Oklahoma City Thunder',   city:'Oklahoma City',wins:45, losses:18, conf:'West' },
-  { tricode:'MIN', name:'Minnesota Timberwolves',  city:'Minneapolis',  wins:40, losses:23, conf:'West' },
-  { tricode:'IND', name:'Indiana Pacers',          city:'Indianapolis', wins:35, losses:28, conf:'East' },
-  { tricode:'SAS', name:'San Antonio Spurs',       city:'San Antonio',  wins:18, losses:45, conf:'West' },
-  { tricode:'TOR', name:'Toronto Raptors',         city:'Toronto',      wins:17, losses:46, conf:'East' },
-  { tricode:'SAC', name:'Sacramento Kings',        city:'Sacramento',   wins:30, losses:33, conf:'West' },
-  { tricode:'ATL', name:'Atlanta Hawks',           city:'Atlanta',      wins:26, losses:37, conf:'East' },
-  { tricode:'CHI', name:'Chicago Bulls',           city:'Chicago',      wins:24, losses:39, conf:'East' },
-  { tricode:'NOP', name:'New Orleans Pelicans',    city:'New Orleans',  wins:22, losses:41, conf:'West' },
+/* ── Proxies CORS con fallback automático ── */
+const PROXIES = [
+  url => fetch(url),
+  url => fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(url)),
+  url => fetch('https://corsproxy.io/?url=' + encodeURIComponent(url)),
+  url => fetch('https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url)),
 ];
 
-/* ── Arenas ── */
-const ARENAS = {
-  LAL:'Crypto.com Arena', BOS:'TD Garden', GSW:'Chase Center',
-  MIA:'Kaseya Center', DEN:'Ball Arena', NYK:'Madison Square Garden',
-  PHX:'Footprint Center', MIL:'Fiserv Forum', DAL:'American Airlines Center',
-  PHI:'Wells Fargo Center', CLE:'Rocket Mortgage FieldHouse', OKC:'Paycom Center',
-  MIN:'Target Center', IND:'Gainbridge Fieldhouse', SAS:'Frost Bank Center',
-  TOR:'Scotiabank Arena', SAC:'Golden 1 Center', ATL:'State Farm Arena',
-  CHI:'United Center', NOP:'Smoothie King Center',
-};
+let workingProxy = 0;
 
-/* ── Utilidades ── */
-const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-const pick  = arr => arr[Math.floor(Math.random() * arr.length)];
-
-function todayStr() {
-  const d = new Date();
-  return d.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
+async function fetchNBA() {
+  const order = [workingProxy, ...[0,1,2,3].filter(i => i !== workingProxy)];
+  for (const idx of order) {
+    try {
+      const res = await PROXIES[idx](NBA_URL);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const json = await res.json();
+      workingProxy = idx;
+      return json;
+    } catch(e) {
+      console.warn('Proxy ' + idx + ' falló:', e.message);
+    }
+  }
+  throw new Error('Todos los proxies fallaron');
 }
 
-/* ── Generar cuartos realistas ── */
-function genQuarters(total, n) {
-  // Distribuye `total` puntos en `n` cuartos de forma realista (24-32 por cuarto)
-  const qs = [];
-  let rem = total;
-  for (let i = 0; i < n; i++) {
-    const isLast = i === n - 1;
-    const base = isLast ? rem : rand(22, Math.min(34, rem - (n - i - 1) * 18));
-    qs.push(Math.max(base, 0));
-    rem -= qs[i];
-  }
-  return qs;
-}
-
-/* ── Estado global de partidos (persiste entre refreshes) ── */
-let STATE = null;
-
-function initState() {
-  // Seleccionar N equipos sin repetir y armar N/2 matchups
-  const shuffled = [...TEAMS].sort(() => Math.random() - 0.5);
-  const count = rand(5, 10); // entre 5 y 10 partidos
-  const pairs = Math.min(count, Math.floor(shuffled.length / 2));
-
-  const now = new Date();
-
-  const games = [];
-  for (let i = 0; i < pairs; i++) {
-    const away = shuffled[i * 2];
-    const home = shuffled[i * 2 + 1];
-
-    // Distribución de estados: ~30% live, ~30% soon, ~40% final
-    const roll = Math.random();
-    let status, gameData;
-
-    if (roll < 0.30) {
-      // ── EN VIVO ──
-      const period = rand(1, 4);
-      const minLeft = rand(0, 11);
-      const secLeft = rand(0, 59);
-
-      // Puntajes coherentes con el período
-      const baseScore = period * rand(22, 30);
-      const awayTotal = baseScore + rand(-8, 8);
-      const homeTotal = baseScore + rand(-8, 8);
-
-      // Cuartos completados
-      const awayQs = genQuarters(awayTotal, period);
-      const homeQs = genQuarters(homeTotal, period);
-
-      gameData = {
-        gameStatus: 2,
-        period,
-        gameClock: `PT${String(minLeft).padStart(2,'0')}M${String(secLeft).padStart(2,'0')}.00S`,
-        awayScore: awayTotal,
-        homeScore: homeTotal,
-        awayPeriods: awayQs,
-        homePeriods: homeQs,
-        // Velocidad de scoring: puntos por tick (30s) por equipo
-        awayRate: rand(2, 5),
-        homeRate: rand(2, 5),
-        minLeft, secLeft,
-      };
-    } else if (roll < 0.60) {
-      // ── PROGRAMADO ──
-      const hoursAhead = rand(1, 5);
-      const tipoff = new Date(now.getTime() + hoursAhead * 3600000);
-      gameData = {
-        gameStatus: 1,
-        gameTimeUTC: tipoff.toISOString(),
-        awayScore: 0, homeScore: 0,
-        awayPeriods: [], homePeriods: [],
-      };
-    } else {
-      // ── FINALIZADO ──
-      const awayFinal = rand(88, 126);
-      const homeFinal = rand(88, 126);
-      const awayQs = genQuarters(awayFinal, 4);
-      const homeQs = genQuarters(homeFinal, 4);
-      gameData = {
-        gameStatus: 3,
-        period: 4,
-        awayScore: awayFinal,
-        homeScore: homeFinal,
-        awayPeriods: awayQs,
-        homePeriods: homeQs,
-      };
-    }
-
-    games.push({
-      gameId: 'mock_' + i,
-      gameCode: todayStr().replace(/\//g,'') + '/' + away.tricode + home.tricode,
-      arenaName: ARENAS[home.tricode] || home.city,
-      arenaCity: home.city,
-      awayTeam: away,
-      homeTeam: home,
-      ...gameData,
-    });
-  }
-
-  // Garantizar al menos 1 partido programado para que siempre sea visible en el mock
-  const hasSoon = games.some(g => g.gameStatus === 1);
-  if (!hasSoon) {
-    // Tomar los dos equipos siguientes del shuffle (posiciones pairs*2 y pairs*2+1)
-    const idx1 = (pairs * 2) % shuffled.length;
-    const idx2 = (pairs * 2 + 1) % shuffled.length;
-    const soonAway = shuffled[idx1];
-    const soonHome = shuffled[idx2 !== idx1 ? idx2 : (idx2 + 1) % shuffled.length];
-    const hoursAhead = rand(1, 4);
-    const tipoff = new Date(now.getTime() + hoursAhead * 3600000);
-    games.push({
-      gameId: 'mock_soon',
-      gameCode: todayStr().replace(/\//g,'') + '/' + soonAway.tricode + soonHome.tricode,
-      arenaName: ARENAS[soonHome.tricode] || soonHome.city,
-      arenaCity: soonHome.city,
-      awayTeam: soonAway,
-      homeTeam: soonHome,
-      gameStatus: 1,
-      gameTimeUTC: tipoff.toISOString(),
-      awayScore: 0, homeScore: 0,
-      awayPeriods: [], homePeriods: [],
-    });
-  }
-
-  STATE = { games, tick: 0, date: todayStr() };
-}
-
-/* ── Tick: evolucionar partidos en vivo ── */
-function tickState() {
-  if (!STATE) return;
-  STATE.tick++;
-
-  for (const g of STATE.games) {
-    if (g.gameStatus !== 2) continue;
-
-    // Añadir puntos de forma realista
-    const awayAdd = rand(0, g.awayRate);
-    const homeAdd = rand(0, g.homeRate);
-    g.awayScore += awayAdd;
-    g.homeScore += homeAdd;
-
-    // Actualizar cuarto activo
-    const qi = g.period - 1;
-    if (g.awayPeriods[qi] !== undefined) g.awayPeriods[qi] += awayAdd;
-    else g.awayPeriods.push(awayAdd);
-    if (g.homePeriods[qi] !== undefined) g.homePeriods[qi] += homeAdd;
-    else g.homePeriods.push(homeAdd);
-
-    // Avanzar reloj (restar ~30s)
-    g.secLeft -= 30;
-    if (g.secLeft < 0) {
-      g.minLeft--;
-      g.secLeft += 60;
-    }
-    if (g.minLeft < 0) {
-      // Cambiar de período o finalizar
-      if (g.period < 4) {
-        g.period++;
-        g.minLeft = 11;
-        g.secLeft = 59;
-        g.awayRate = rand(2, 5);
-        g.homeRate = rand(2, 5);
-        g.awayPeriods.push(0);
-        g.homePeriods.push(0);
-      } else {
-        // Partido terminado
-        g.gameStatus = 3;
-        g.minLeft = 0;
-        g.secLeft = 0;
-      }
-    }
-
-    // Reconstruir gameClock
-    g.gameClock = `PT${String(Math.max(g.minLeft,0)).padStart(2,'0')}M${String(Math.max(g.secLeft,0)).padStart(2,'0')}.00S`;
-  }
+/* ── Normalizar partido de la API real al formato que espera el render ── */
+function normalizeGame(g) {
+  const home = g.homeTeam, away = g.awayTeam;
+  return {
+    gameId:      g.gameId,
+    gameStatus:  g.gameStatus,           // 1=programado 2=vivo 3=final
+    gameTimeUTC: g.gameTimeUTC ?? null,
+    period:      g.period ?? 0,
+    gameClock:   g.gameClock ?? '',
+    awayScore:   away.score ?? 0,
+    homeScore:   home.score ?? 0,
+    awayPeriods: (away.periods ?? []).map(p => p.score ?? 0),
+    homePeriods: (home.periods ?? []).map(p => p.score ?? 0),
+    awayTeam: {
+      tricode: away.teamTricode,
+      wins:    away.wins    ?? 0,
+      losses:  away.losses  ?? 0,
+    },
+    homeTeam: {
+      tricode: home.teamTricode,
+      wins:    home.wins    ?? 0,
+      losses:  home.losses  ?? 0,
+    },
+  };
 }
 
 /* ══════════════════════════════════════
@@ -549,6 +364,7 @@ function buildCard(game, idx) {
   </div>`;
 }
 
+
 /* ── Countdown bar ── */
 let cd = REFRESH/1000, timerInt, fetchInt;
 
@@ -569,65 +385,60 @@ const tickClock = () =>
     new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 setInterval(tickClock, 1000); tickClock();
 
-/* ── Render principal ── */
-function render(first=false) {
-  const games = STATE.games;
+/* ── Render con datos reales ── */
+function renderGames(games, first) {
+  document.getElementById('date-label').textContent =
+    'Partidos · ' + new Date().toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit', year:'numeric'});
 
-  document.getElementById('date-label').textContent = 'Partidos · ' + STATE.date;
-
-  // Ocultar loading
   document.getElementById('state-wrap').classList.remove('show');
 
-  // Mostrar timestamp
   const upEl = document.getElementById('last-update');
   const upTime = document.getElementById('update-time');
   upEl.style.display = 'block';
   upTime.textContent = new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 
-  // Orden: live → soon → final
+  if (!games.length) {
+    document.getElementById('grid').innerHTML =
+      `<p style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);letter-spacing:.07em">Sin partidos para hoy.</p>`;
+    return;
+  }
+
   const order = {live:0,soon:1,final:2};
   const sorted = [...games].sort((a,b) => order[statusInfo(a).type] - order[statusInfo(b).type]);
+  const grid = document.getElementById('grid');
 
   if (first) {
-    // Primera carga: animar todo
-    document.getElementById('grid').innerHTML = sorted.map((g,i) => buildCard(g,i)).join('');
+    grid.innerHTML = sorted.map((g,i) => buildCard(g,i)).join('');
   } else {
-    // Refreshes siguientes: actualizar solo las cards existentes sin re-animar
-    const grid = document.getElementById('grid');
-    const existing = new Map([...grid.querySelectorAll('.card')].map(el => [el.dataset.id, el]));
-
-    // Reconstruir con nuevo orden, preservando las que no cambiaron
-    const newHTML = sorted.map((g, i) => {
-      const newCard = document.createElement('div');
-      newCard.innerHTML = buildCard(g, i);
-      const card = newCard.firstElementChild;
-      // Quitar animación en refreshes
-      card.style.animationDelay = '0s';
+    grid.innerHTML = sorted.map((g,i) => {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = buildCard(g,i);
+      const card = wrap.firstElementChild;
       card.style.animation = 'none';
       return card.outerHTML;
     }).join('');
-
-    grid.innerHTML = newHTML;
   }
 }
 
-/* ── Ciclo principal ── */
-function tick(first=false) {
-  if (first) {
-    initState();
-  } else {
-    tickState(); // evolucionar partidos en vivo
+/* ── Fetch y ciclo principal ── */
+async function loadGames(first=false) {
+  try {
+    const json  = await fetchNBA();
+    const raw   = json?.scoreboard?.games ?? [];
+    const games = raw.map(normalizeGame);
+    renderGames(games, first);
+  } catch(e) {
+    console.error('Error cargando partidos NBA:', e.message);
+    if (first) {
+      document.getElementById('state-msg').textContent = 'Error al cargar. Reintentando…';
+    }
   }
-  render(first);
-  startBar();
 }
 
-// Arrancar con delay de 600ms para que se vea el spinner brevemente
-setTimeout(() => {
-  tick(true);
-  clearInterval(fetchInt);
-  fetchInt = setInterval(() => tick(false), REFRESH);
-}, 600);
+loadGames(true);
+startBar();
+clearInterval(fetchInt);
+fetchInt = setInterval(() => { loadGames(false); startBar(); }, REFRESH);
 </script>
 </body>
 </html>
