@@ -2,7 +2,7 @@
   "meta": {
     "version": 1,
     "request": "https://nba-prod-us-east-1-mediaops-stats.s3.amazonaws.com/NBA/liveData/scoreboard/todaysScoreboard_00.json",
-    "time": "2026-03-21 05:58:23.5823",
+    "time": "2026-03-21 06:49:46.4946",
     "code": 200
   },
   "scoreboard": {
@@ -14,9 +14,9 @@
         "gameId": "0022501022",
         "gameCode": "20260321/OKCWAS",
         "gameStatus": 2,
-        "gameStatusText": "Q2 3:57",
-        "period": 2,
-        "gameClock": "PT03M57.00S",
+        "gameStatusText": "Q3 6:06",
+        "period": 3,
+        "gameClock": "PT06M06.00S",
         "gameTimeUTC": "2026-03-21T21:00:00Z",
         "gameEt": "2026-03-21T17:00:00-04:00",
         "regulationPeriods": 4,
@@ -36,10 +36,10 @@
           "teamTricode": "WAS",
           "wins": 16,
           "losses": 53,
-          "score": 59,
+          "score": 75,
           "seed": null,
           "inBonus": "0",
-          "timeoutsRemaining": 4,
+          "timeoutsRemaining": 3,
           "periods": [
             {
               "period": 1,
@@ -49,12 +49,12 @@
             {
               "period": 2,
               "periodType": "REGULAR",
-              "score": 27
+              "score": 32
             },
             {
               "period": 3,
               "periodType": "REGULAR",
-              "score": 0
+              "score": 11
             },
             {
               "period": 4,
@@ -70,10 +70,10 @@
           "teamTricode": "OKC",
           "wins": 55,
           "losses": 15,
-          "score": 57,
+          "score": 82,
           "seed": null,
           "inBonus": "0",
-          "timeoutsRemaining": 5,
+          "timeoutsRemaining": 4,
           "periods": [
             {
               "period": 1,
@@ -83,12 +83,12 @@
             {
               "period": 2,
               "periodType": "REGULAR",
-              "score": 25
+              "score": 37
             },
             {
               "period": 3,
               "periodType": "REGULAR",
-              "score": 0
+              "score": 13
             },
             {
               "period": 4,
@@ -99,25 +99,25 @@
         },
         "gameLeaders": {
           "homeLeaders": {
-            "personId": 1642259,
-            "name": "Alex Sarr",
-            "jerseyNum": "20",
-            "position": "C",
+            "personId": 1642364,
+            "name": "Jamir Watkins",
+            "jerseyNum": "5",
+            "position": "F",
             "teamTricode": "WAS",
-            "playerSlug": "alex-sarr",
-            "points": 11,
+            "playerSlug": "jamir-watkins",
+            "points": 13,
             "rebounds": 3,
-            "assists": 5
+            "assists": 2
           },
           "awayLeaders": {
-            "personId": 1642349,
-            "name": "Ajay Mitchell",
-            "jerseyNum": "25",
+            "personId": 1628983,
+            "name": "Shai Gilgeous-Alexander",
+            "jerseyNum": "2",
             "position": "G",
             "teamTricode": "OKC",
-            "playerSlug": "ajay-mitchell",
-            "points": 14,
-            "rebounds": 1,
+            "playerSlug": "shai-gilgeous-alexander",
+            "points": 24,
+            "rebounds": 2,
             "assists": 3
           }
         },
