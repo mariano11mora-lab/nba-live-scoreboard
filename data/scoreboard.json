@@ -2,7 +2,7 @@
   "meta": {
     "version": 1,
     "request": "https://nba-prod-us-east-1-mediaops-stats.s3.amazonaws.com/NBA/liveData/scoreboard/todaysScoreboard_00.json",
-    "time": "2026-03-21 05:38:05.385",
+    "time": "2026-03-21 05:58:23.5823",
     "code": 200
   },
   "scoreboard": {
@@ -14,9 +14,9 @@
         "gameId": "0022501022",
         "gameCode": "20260321/OKCWAS",
         "gameStatus": 2,
-        "gameStatusText": "Q2 11:14",
+        "gameStatusText": "Q2 3:57",
         "period": 2,
-        "gameClock": "PT11M14.00S",
+        "gameClock": "PT03M57.00S",
         "gameTimeUTC": "2026-03-21T21:00:00Z",
         "gameEt": "2026-03-21T17:00:00-04:00",
         "regulationPeriods": 4,
@@ -36,10 +36,10 @@
           "teamTricode": "WAS",
           "wins": 16,
           "losses": 53,
-          "score": 36,
+          "score": 59,
           "seed": null,
           "inBonus": "0",
-          "timeoutsRemaining": 5,
+          "timeoutsRemaining": 4,
           "periods": [
             {
               "period": 1,
@@ -49,7 +49,7 @@
             {
               "period": 2,
               "periodType": "REGULAR",
-              "score": 4
+              "score": 27
             },
             {
               "period": 3,
@@ -70,10 +70,10 @@
           "teamTricode": "OKC",
           "wins": 55,
           "losses": 15,
-          "score": 34,
+          "score": 57,
           "seed": null,
           "inBonus": "0",
-          "timeoutsRemaining": 7,
+          "timeoutsRemaining": 5,
           "periods": [
             {
               "period": 1,
@@ -83,7 +83,7 @@
             {
               "period": 2,
               "periodType": "REGULAR",
-              "score": 2
+              "score": 25
             },
             {
               "period": 3,
@@ -105,20 +105,20 @@
             "position": "C",
             "teamTricode": "WAS",
             "playerSlug": "alex-sarr",
-            "points": 7,
-            "rebounds": 2,
-            "assists": 3
+            "points": 11,
+            "rebounds": 3,
+            "assists": 5
           },
           "awayLeaders": {
-            "personId": 1628392,
-            "name": "Isaiah Hartenstein",
-            "jerseyNum": "55",
-            "position": "CF",
+            "personId": 1642349,
+            "name": "Ajay Mitchell",
+            "jerseyNum": "25",
+            "position": "G",
             "teamTricode": "OKC",
-            "playerSlug": "isaiah-hartenstein",
-            "points": 6,
-            "rebounds": 6,
-            "assists": 2
+            "playerSlug": "ajay-mitchell",
+            "points": 14,
+            "rebounds": 1,
+            "assists": 3
           }
         },
         "pbOdds": {
