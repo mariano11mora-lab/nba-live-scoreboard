@@ -194,7 +194,10 @@ const REFRESH  = 30000;
 
 /* ── Fetch del archivo local generado por GitHub Actions ── */
 async function fetchNBA() {
-  const res = await fetch(DATA_URL + '?t=' + Date.now()); // cache-bust
+  const res = await fetch(DATA_URL + '?t=' + Date.now(), {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
+  });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
 }
