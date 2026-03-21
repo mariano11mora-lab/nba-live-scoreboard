@@ -188,18 +188,14 @@
 
 <div id="bar" style="width:100%"></div>
 
+<script src="./data/scoreboard-data.js"></script>
 <script>
-const DATA_URL = 'https://raw.githubusercontent.com/mariano11mora-lab/nba-live-scoreboard/main/data/scoreboard.json';
-const REFRESH  = 30000;
+const REFRESH = 30000;
 
-/* ── Fetch del archivo local generado por GitHub Actions ── */
+/* ── Leer datos inyectados por GitHub Actions en scoreboard-data.js ── */
 async function fetchNBA() {
-  const res = await fetch(DATA_URL + '?t=' + Date.now(), {
-    cache: 'no-store',
-    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
-  });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  return res.json();
+  if (typeof NBA_SCOREBOARD === 'undefined') throw new Error('scoreboard-data.js no cargado');
+  return NBA_SCOREBOARD;
 }
 
 /* ── Normalizar partido de la API real al formato que espera el render ── */
