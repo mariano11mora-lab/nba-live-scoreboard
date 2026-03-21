@@ -26,21 +26,21 @@ jobs:
             "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json" \
             -o /tmp/raw.json
 
-          # Inyectar timestamp para que el archivo SIEMPRE cambie y rompa el cache
           python3 -c "
-          import json, sys
+          import json
           from datetime import datetime, timezone
           with open('/tmp/raw.json') as f:
               data = json.load(f)
           data['fetched_at'] = datetime.now(timezone.utc).isoformat()
-          with open('data/scoreboard.json', 'w') as f:
-              json.dump(data, f)
+          js = 'var NBA_SCOREBOARD = ' + json.dumps(data) + ';'
+          with open('data/scoreboard-data.js', 'w') as f:
+              f.write(js)
           "
 
       - name: Commit and push
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/scoreboard.json
+          git add data/scoreboard-data.js
           git commit -m "chore: scoreboard $(date -u '+%H:%M UTC')"
           git push
