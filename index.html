@@ -428,9 +428,14 @@ async function loadGames(first=false) {
     renderGames(games, first);
   } catch(e) {
     console.error('Error cargando partidos NBA:', e.message);
-    if (first) {
-      document.getElementById('state-msg').textContent = 'Error al cargar. Reintentando…';
-    }
+    // Ocultar spinner y mostrar error legible en pantalla
+    document.getElementById('state-wrap').classList.remove('show');
+    document.getElementById('grid').innerHTML =
+      `<p style="font-family:'DM Mono',monospace;font-size:.72rem;color:#ff6b6b;letter-spacing:.07em;line-height:1.8">
+        No se pudo cargar el scoreboard.<br>
+        <span style="color:var(--muted)">${e.message}</span><br><br>
+        <span style="color:var(--muted)">Reintentando en 30s…</span>
+      </p>`;
   }
 }
 
