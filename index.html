@@ -189,33 +189,14 @@
 <div id="bar" style="width:100%"></div>
 
 <script>
-const NBA_URL = 'https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json';
+const DATA_URL = './data/scoreboard.json';
 const REFRESH  = 30000;
 
-/* ── Proxies CORS con fallback automático ── */
-const PROXIES = [
-  url => fetch(url),
-  url => fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(url)),
-  url => fetch('https://corsproxy.io/?url=' + encodeURIComponent(url)),
-  url => fetch('https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url)),
-];
-
-let workingProxy = 0;
-
+/* ── Fetch del archivo local generado por GitHub Actions ── */
 async function fetchNBA() {
-  const order = [workingProxy, ...[0,1,2,3].filter(i => i !== workingProxy)];
-  for (const idx of order) {
-    try {
-      const res = await PROXIES[idx](NBA_URL);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const json = await res.json();
-      workingProxy = idx;
-      return json;
-    } catch(e) {
-      console.warn('Proxy ' + idx + ' falló:', e.message);
-    }
-  }
-  throw new Error('Todos los proxies fallaron');
+  const res = await fetch(DATA_URL + '?t=' + Date.now()); // cache-bust
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
 }
 
 /* ── Normalizar partido de la API real al formato que espera el render ── */
