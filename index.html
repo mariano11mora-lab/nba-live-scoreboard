@@ -163,6 +163,19 @@
 
     @media(max-width:580px){ header{padding:18px 16px 14px} .logo{font-size:1.65rem} main{padding:22px 12px 44px} }
 
+    /* ── Nav días ── */
+    #day-nav {
+      display:flex; gap:4px; margin-bottom:16px;
+    }
+    .day-btn {
+      font-family:'DM Mono',monospace; font-size:.62rem; letter-spacing:.1em;
+      text-transform:uppercase; padding:4px 14px; border-radius:99px; cursor:pointer;
+      border:1px solid var(--border); background:transparent; color:var(--muted);
+      transition:all .2s;
+    }
+    .day-btn.active { color:var(--text); border-color:#4a4a62; font-weight:600 }
+    .day-btn:hover:not(.active) { color:var(--text); border-color:#3a3a52 }
+
     /* ── Favoritos toggle ── */
     #filter-bar {
       display:flex; gap:8px; margin-bottom:20px;
@@ -202,6 +215,11 @@
 
 <main>
   <p class="section-label" id="date-label">Partidos de hoy</p>
+  <div id="day-nav">
+    <button class="day-btn" data-day="yesterday" onclick="setDay('yesterday')">Ayer</button>
+    <button class="day-btn active" data-day="today" onclick="setDay('today')">Hoy</button>
+    <button class="day-btn" data-day="tomorrow"  onclick="setDay('tomorrow')">Mañana</button>
+  </div>
   <div id="filter-bar">
     <button class="filter-btn active" data-filter="all"   onclick="setFilter('all')">Todos</button>
     <button class="filter-btn"        data-filter="favs"  onclick="setFilter('favs')">⭐ Favoritos</button>
@@ -345,24 +363,55 @@ function rerender() {
   });
 }
 
-/* ── Cargar scoreboard-data.js dinámicamente con cache-bust en cada refresh ── */
-async function fetchNBA() {
-  return new Promise((resolve, reject) => {
-    // Limpiar script anterior si existe
-    const old = document.getElementById('nba-data-script');
-    if (old) old.remove();
-    if (window.NBA_SCOREBOARD) delete window.NBA_SCOREBOARD;
+/* ── Vista activa (today / yesterday / tomorrow) ── */
+let currentView = 'today';
 
-    const script = document.createElement('script');
-    script.id  = 'nba-data-script';
-    script.src = './data/scoreboard-data.js?t=' + Date.now();
-    script.onload = () => {
-      if (typeof NBA_SCOREBOARD !== 'undefined') resolve(NBA_SCOREBOARD);
-      else reject(new Error('NBA_SCOREBOARD no definido en el script'));
-    };
-    script.onerror = () => reject(new Error('No se pudo cargar scoreboard-data.js'));
-    document.head.appendChild(script);
-  });
+const DAY_URLS = {
+  today:     null, // usa el .js local via script tag
+  yesterday: 'https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_1.json',
+  tomorrow:  'https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_2.json',
+};
+
+const DAY_LABELS = { today:'Hoy', yesterday:'Ayer', tomorrow:'Mañana' };
+
+function setDay(day) {
+  currentView = day;
+  document.querySelectorAll('.day-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.day === day)
+  );
+  // El auto-refresh solo tiene sentido en "hoy"
+  clearInterval(fetchInt);
+  if (day === 'today') {
+    fetchInt = setInterval(() => { loadGames(false); startBar(); }, REFRESH);
+  }
+  lastGames = [];
+  loadGames(true);
+}
+
+/* ── Fetch: today usa .js local (sin CORS), otros usan fetch directo a la CDN ── */
+async function fetchNBA() {
+  if (currentView === 'today') {
+    // Cargar via script tag para evitar CORS
+    return new Promise((resolve, reject) => {
+      const old = document.getElementById('nba-data-script');
+      if (old) old.remove();
+      if (window.NBA_SCOREBOARD) delete window.NBA_SCOREBOARD;
+      const script = document.createElement('script');
+      script.id    = 'nba-data-script';
+      script.src   = './data/scoreboard-data.js?t=' + Date.now();
+      script.onload  = () => typeof NBA_SCOREBOARD !== 'undefined'
+        ? resolve(NBA_SCOREBOARD)
+        : reject(new Error('NBA_SCOREBOARD no definido'));
+      script.onerror = () => reject(new Error('No se pudo cargar scoreboard-data.js'));
+      document.head.appendChild(script);
+    });
+  }
+
+  // Ayer / Mañana: fetch directo a la CDN de la NBA
+  const url = DAY_URLS[currentView] + '?t=' + Date.now();
+  const res  = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
 }
 
 /* ── Normalizar partido de la API real al formato que espera el render ── */
@@ -557,8 +606,10 @@ setInterval(tickClock, 1000); tickClock();
 
 /* ── Render con datos reales ── */
 function renderGames(games, first) {
-  document.getElementById('date-label').textContent =
-    'Partidos · ' + new Date().toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit', year:'numeric'});
+  const dateStr = currentView === 'today'
+    ? new Date().toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit', year:'numeric'})
+    : (DAY_LABELS[currentView] + ' · ' + new Date().toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit', year:'numeric'}));
+  document.getElementById('date-label').textContent = 'Partidos · ' + dateStr;
 
   document.getElementById('state-wrap').classList.remove('show');
 
