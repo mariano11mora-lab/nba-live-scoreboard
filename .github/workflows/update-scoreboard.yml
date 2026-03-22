@@ -17,41 +17,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fetch NBA scoreboards
+      - name: Fetch scoreboards
         run: |
           mkdir -p data
 
-          fetch_and_save() {
+          fetch_day() {
             local url="$1"
-            local outfile="$2"
-            curl -s \
-              -H "Accept: application/json" \
-              -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
-              -H "Referer: https://www.nba.com/" \
+            local outjs="$2"
+            curl -sf \
+              -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+              -H "Accept: application/json, text/plain, */*" \
+              -H "Accept-Language: en-US,en;q=0.9" \
+              -H "Referer: https://www.nba.com/games" \
               -H "Origin: https://www.nba.com" \
-              "$url" -o /tmp/raw.json
+              "$url" -o /tmp/raw.json 2>/dev/null || echo '{}' > /tmp/raw.json
 
-            python3 -c "
-          import json
-          from datetime import datetime, timezone
-          with open('/tmp/raw.json') as f:
-              data = json.load(f)
-          data['fetched_at'] = datetime.now(timezone.utc).isoformat()
-          js = 'var NBA_SCOREBOARD = ' + json.dumps(data) + ';'
-          with open('$outfile', 'w') as f:
-              f.write(js)
-          "
+            python3 << PYEOF
+import json, sys
+from datetime import datetime, timezone
+try:
+    with open('/tmp/raw.json') as f:
+        data = json.load(f)
+    if 'scoreboard' not in data:
+        raise ValueError('No scoreboard key')
+    data['fetched_at'] = datetime.now(timezone.utc).isoformat()
+    with open('$outjs', 'w') as f:
+        f.write('var NBA_SCOREBOARD = ' + json.dumps(data) + ';')
+    print('OK: $outjs')
+except Exception as e:
+    print(f'WARN: {e} — keeping existing file')
+    sys.exit(0)
+PYEOF
           }
 
-          fetch_and_save \
+          fetch_day \
             "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json" \
             "data/scoreboard-data.js"
 
-          fetch_and_save \
+          fetch_day \
             "https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_1.json" \
             "data/scoreboard-yesterday.js"
 
-          fetch_and_save \
+          fetch_day \
             "https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_2.json" \
             "data/scoreboard-tomorrow.js"
 
