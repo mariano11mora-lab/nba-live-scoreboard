@@ -180,15 +180,16 @@
     /* ── Estrella favorito ── */
     .fav-btn {
       background:none; cursor:pointer; line-height:1;
-      font-size:.75rem; transition:transform .15s, background .2s, border-color .2s;
-      width:20px; height:20px; border-radius:4px;
+      font-size:.6rem; transition:transform .15s, background .2s, border-color .2s;
+      width:16px; height:16px; border-radius:3px; flex-shrink:0;
       display:flex; align-items:center; justify-content:center;
       border:1px solid var(--accent); color:var(--accent);
     }
     .fav-btn:hover   { background:rgba(200,255,0,.15); transform:scale(1.1) }
     .fav-btn.active  { background:var(--accent); border-color:var(--accent); color:#0a0a0f }
-    .team-row { display:flex; align-items:center; gap:5px }
+    .team-row { display:flex; align-items:center; gap:4px; overflow:hidden }
     .team.away .team-row { flex-direction:row-reverse }
+    .tricode { min-width:0 }
   </style>
 </head>
 <body>
