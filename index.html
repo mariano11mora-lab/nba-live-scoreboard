@@ -207,6 +207,28 @@
 
     #bar { position:fixed; bottom:0; left:0; height:2px; background:var(--accent); opacity:.55; transition:width 1s linear; z-index:10 }
 
+    /* ── Toast clutch ── */
+    #toast-container {
+      position:fixed; top:20px; right:20px; z-index:9999;
+      display:flex; flex-direction:column; gap:10px; pointer-events:none;
+    }
+    .toast {
+      background:#141925;
+      border:1px solid rgba(255,200,0,.35);
+      border-left:3px solid rgba(255,200,0,.8);
+      border-radius:10px;
+      padding:12px 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.7), 0 0 20px rgba(255,200,0,.1);
+      font-family:'DM Mono',monospace;
+      max-width:300px;
+      transform:translateX(120%); opacity:0;
+      transition:transform .35s cubic-bezier(.22,1,.36,1), opacity .3s ease;
+      pointer-events:auto;
+    }
+    .toast.show { transform:translateX(0); opacity:1 }
+    .toast-title { font-size:.72rem; color:#ffc800; letter-spacing:.06em; font-weight:500; margin-bottom:4px }
+    .toast-body  { font-size:.65rem; color:var(--muted); letter-spacing:.04em; line-height:1.5 }
+
     @media(max-width:580px){ header{padding:18px 16px 14px} .logo{font-size:1.65rem} main{padding:22px 12px 44px} }
 
     /* ── Favoritos toggle ── */
@@ -264,6 +286,7 @@
 </main>
 
 <div id="bar" style="width:100%"></div>
+<div id="toast-container"></div>
 
 <script>
 const REFRESH = 30000;
@@ -637,12 +660,48 @@ function renderGames(games, first) {
   rerender();
 }
 
+/* ── Toast ── */
+function showToast(title, body) {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<div class="toast-title">${title}</div><div class="toast-body">${body}</div>`;
+  container.appendChild(el);
+  requestAnimationFrame(() => { requestAnimationFrame(() => { el.classList.add('show'); }); });
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 400);
+  }, 4500);
+}
+
+/* ── Estado clutch previo por partido (persiste entre fetches) ── */
+const clutchState = {}; // gameId → wasClutch
+
+function checkClutchToasts(games) {
+  games.forEach(g => {
+    const id      = g.gameId;
+    const clutch  = isClutch(g);
+    const wasCl   = clutchState[id] ?? false;
+    if (clutch && !wasCl) {
+      const diff = Math.abs((g.awayScore ?? 0) - (g.homeScore ?? 0));
+      const clock = fmtClock(g.gameClock);
+      const period = g.period > 4 ? 'OT' + (g.period - 4) : 'Q' + g.period;
+      showToast(
+        '🔥 Partido caliente: ' + g.awayTeam.tricode + ' vs ' + g.homeTeam.tricode,
+        '⏱️ ' + period + ' · ' + clock + ' — diferencia de ' + diff + ' pts'
+      );
+    }
+    clutchState[id] = clutch;
+  });
+}
+
 /* ── Fetch y ciclo principal ── */
 async function loadGames(first=false) {
   try {
     const json  = await fetchNBA();
     const raw   = json?.scoreboard?.games ?? [];
     const games = raw.map(normalizeGame);
+    if (!first) checkClutchToasts(games); // solo en refreshes, no en carga inicial
     renderGames(games, first);
   } catch(e) {
     console.error('Error cargando partidos NBA:', e.message);
