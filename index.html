@@ -188,14 +188,27 @@
 
 <div id="bar" style="width:100%"></div>
 
-<script src="./data/scoreboard-data.js"></script>
 <script>
 const REFRESH = 30000;
 
-/* ── Leer datos inyectados por GitHub Actions en scoreboard-data.js ── */
+/* ── Cargar scoreboard-data.js dinámicamente con cache-bust en cada refresh ── */
 async function fetchNBA() {
-  if (typeof NBA_SCOREBOARD === 'undefined') throw new Error('scoreboard-data.js no cargado');
-  return NBA_SCOREBOARD;
+  return new Promise((resolve, reject) => {
+    // Limpiar script anterior si existe
+    const old = document.getElementById('nba-data-script');
+    if (old) old.remove();
+    if (window.NBA_SCOREBOARD) delete window.NBA_SCOREBOARD;
+
+    const script = document.createElement('script');
+    script.id  = 'nba-data-script';
+    script.src = './data/scoreboard-data.js?t=' + Date.now();
+    script.onload = () => {
+      if (typeof NBA_SCOREBOARD !== 'undefined') resolve(NBA_SCOREBOARD);
+      else reject(new Error('NBA_SCOREBOARD no definido en el script'));
+    };
+    script.onerror = () => reject(new Error('No se pudo cargar scoreboard-data.js'));
+    document.head.appendChild(script);
+  });
 }
 
 /* ── Normalizar partido de la API real al formato que espera el render ── */
