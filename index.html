@@ -162,6 +162,30 @@
     #bar { position:fixed; bottom:0; left:0; height:2px; background:var(--accent); opacity:.55; transition:width 1s linear; z-index:10 }
 
     @media(max-width:580px){ header{padding:18px 16px 14px} .logo{font-size:1.65rem} main{padding:22px 12px 44px} }
+
+    /* ── Favoritos toggle ── */
+    #filter-bar {
+      display:flex; gap:8px; margin-bottom:20px;
+    }
+    .filter-btn {
+      font-family:'DM Mono',monospace; font-size:.62rem; letter-spacing:.1em;
+      text-transform:uppercase; padding:4px 14px; border-radius:99px; cursor:pointer;
+      border:1px solid var(--border); background:transparent; color:var(--muted);
+      transition:all .2s;
+    }
+    .filter-btn.active {
+      background:var(--accent); color:#0a0a0f; border-color:var(--accent); font-weight:600;
+    }
+
+    /* ── Estrella favorito ── */
+    .fav-btn {
+      background:none; border:none; cursor:pointer; padding:0; line-height:1;
+      font-size:.85rem; opacity:.35; transition:opacity .2s, transform .15s;
+    }
+    .fav-btn:hover   { opacity:.7; transform:scale(1.15) }
+    .fav-btn.active  { opacity:1 }
+    .team-row { display:flex; align-items:center; gap:5px }
+    .team.away .team-row { flex-direction:row-reverse }
   </style>
 </head>
 <body>
@@ -176,6 +200,10 @@
 
 <main>
   <p class="section-label" id="date-label">Partidos de hoy</p>
+  <div id="filter-bar">
+    <button class="filter-btn active" data-filter="all"   onclick="setFilter('all')">Todos</button>
+    <button class="filter-btn"        data-filter="favs"  onclick="setFilter('favs')">⭐ Favoritos</button>
+  </div>
   <p id="last-update" style="display:none">Última actualización: <span id="update-time">—</span></p>
 
   <div id="state-wrap" class="show">
@@ -190,6 +218,63 @@
 
 <script>
 const REFRESH = 30000;
+
+/* ══════════════════════════════════════
+   FAVORITOS
+══════════════════════════════════════ */
+function getFavorites() {
+  try { return JSON.parse(localStorage.getItem('favoriteTeams') || '[]'); }
+  catch { return []; }
+}
+function isFavorite(code) { return getFavorites().includes(code); }
+function toggleFavorite(code) {
+  const favs = getFavorites();
+  const idx  = favs.indexOf(code);
+  if (idx === -1) favs.push(code); else favs.splice(idx, 1);
+  localStorage.setItem('favoriteTeams', JSON.stringify(favs));
+  rerender();
+}
+
+/* ── Filtro activo ── */
+let activeFilter = 'all';
+let lastGames    = [];
+
+function setFilter(f) {
+  activeFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.filter === f)
+  );
+  rerender();
+}
+
+function applyFilter(games) {
+  if (activeFilter === 'all') return games;
+  return games.filter(g =>
+    isFavorite(g.awayTeam.tricode) || isFavorite(g.homeTeam.tricode)
+  );
+}
+
+function rerender() {
+  if (!lastGames.length) return;
+  const statusOrder = g => g.gameStatus === 2 ? 0 : g.gameStatus === 1 ? 1 : 2;
+  const sorted   = [...lastGames].sort((a,b) => statusOrder(a) - statusOrder(b));
+  const filtered = applyFilter(sorted);
+  const grid = document.getElementById('grid');
+
+  if (!filtered.length) {
+    grid.innerHTML = `<p style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);letter-spacing:.07em">
+      ${activeFilter === 'favs' ? 'No hay partidos de tus equipos favoritos hoy.' : 'Sin partidos para hoy.'}
+    </p>`;
+    return;
+  }
+  grid.innerHTML = filtered.map((g,i) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = buildCard(g, i);
+    const card = wrap.firstElementChild;
+    card.style.animation = 'none';
+    return card.outerHTML;
+  }).join('');
+}
 
 /* ── Cargar scoreboard-data.js dinámicamente con cache-bust en cada refresh ── */
 async function fetchNBA() {
@@ -362,9 +447,23 @@ function buildCard(game, idx) {
     ${recordsHTML}
 
     <div class="${info.type==='soon' ? 'matchup-soon' : 'matchup'}">
-      <div class="team away"><div class="tricode tc-away">${away.tricode}</div></div>
+      <div class="team away">
+        <div class="team-row">
+          <div class="tricode tc-away">${away.tricode}</div>
+          <button class="fav-btn${isFavorite(away.tricode)?' active':''}" onclick="toggleFavorite('${away.tricode}')" title="Favorito">
+            ${isFavorite(away.tricode)?'★':'☆'}
+          </button>
+        </div>
+      </div>
       ${center}
-      <div class="team home"><div class="tricode tc-home">${home.tricode}</div></div>
+      <div class="team home">
+        <div class="team-row">
+          <div class="tricode tc-home">${home.tricode}</div>
+          <button class="fav-btn${isFavorite(home.tricode)?' active':''}" onclick="toggleFavorite('${home.tricode}')" title="Favorito">
+            ${isFavorite(home.tricode)?'★':'☆'}
+          </button>
+        </div>
+      </div>
     </div>
 
     ${tipoffHTML}
@@ -408,27 +507,9 @@ function renderGames(games, first) {
   upEl.style.display = 'block';
   upTime.textContent = new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 
-  if (!games.length) {
-    document.getElementById('grid').innerHTML =
-      `<p style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);letter-spacing:.07em">Sin partidos para hoy.</p>`;
-    return;
-  }
-
-  const statusOrder = g => g.gameStatus === 2 ? 0 : g.gameStatus === 1 ? 1 : 2;
-  const sorted = [...games].sort((a,b) => statusOrder(a) - statusOrder(b));
-  const grid = document.getElementById('grid');
-
-  if (first) {
-    grid.innerHTML = sorted.map((g,i) => buildCard(g,i)).join('');
-  } else {
-    grid.innerHTML = sorted.map((g,i) => {
-      const wrap = document.createElement('div');
-      wrap.innerHTML = buildCard(g,i);
-      const card = wrap.firstElementChild;
-      card.style.animation = 'none';
-      return card.outerHTML;
-    }).join('');
-  }
+  // Guardar para re-renders por cambio de favoritos/filtro
+  lastGames = games;
+  rerender();
 }
 
 /* ── Fetch y ciclo principal ── */
