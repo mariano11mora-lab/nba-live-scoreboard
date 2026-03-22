@@ -4,6 +4,8 @@ on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: write
@@ -15,32 +17,49 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fetch NBA scoreboard
+      - name: Fetch NBA scoreboards
         run: |
           mkdir -p data
-          curl -s \
-            -H "Accept: application/json" \
-            -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
-            -H "Referer: https://www.nba.com/" \
-            -H "Origin: https://www.nba.com" \
-            "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json" \
-            -o /tmp/raw.json
 
-          python3 -c "
+          fetch_and_save() {
+            local url="$1"
+            local outfile="$2"
+            curl -s \
+              -H "Accept: application/json" \
+              -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
+              -H "Referer: https://www.nba.com/" \
+              -H "Origin: https://www.nba.com" \
+              "$url" -o /tmp/raw.json
+
+            python3 -c "
           import json
           from datetime import datetime, timezone
           with open('/tmp/raw.json') as f:
               data = json.load(f)
           data['fetched_at'] = datetime.now(timezone.utc).isoformat()
           js = 'var NBA_SCOREBOARD = ' + json.dumps(data) + ';'
-          with open('data/scoreboard-data.js', 'w') as f:
+          with open('$outfile', 'w') as f:
               f.write(js)
           "
+          }
+
+          fetch_and_save \
+            "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json" \
+            "data/scoreboard-data.js"
+
+          fetch_and_save \
+            "https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_1.json" \
+            "data/scoreboard-yesterday.js"
+
+          fetch_and_save \
+            "https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_2.json" \
+            "data/scoreboard-tomorrow.js"
 
       - name: Commit and push
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/scoreboard-data.js
+          git add data/
+          git diff --cached --quiet && echo "Sin cambios" && exit 0
           git commit -m "chore: scoreboard $(date -u '+%H:%M UTC')"
           git push
