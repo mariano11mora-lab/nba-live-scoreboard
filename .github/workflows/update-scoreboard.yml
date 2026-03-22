@@ -14,59 +14,29 @@ jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Fetch scoreboards
+      - name: Fetch today
         run: |
           mkdir -p data
+          curl -s -H "User-Agent: Mozilla/5.0" -H "Referer: https://www.nba.com/" "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json" -o /tmp/t.json || echo "{}" > /tmp/t.json
+          python3 -c "import json,sys; d=json.load(open('/tmp/t.json')); d['fetched_at']='$(date -u +%Y-%m-%dT%H:%M:%SZ)'; open('data/scoreboard-data.js','w').write('var NBA_SCOREBOARD='+json.dumps(d)+';')" 2>/dev/null || true
 
-          fetch_day() {
-            local url="$1"
-            local outjs="$2"
-            curl -sf \
-              -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
-              -H "Accept: application/json, text/plain, */*" \
-              -H "Accept-Language: en-US,en;q=0.9" \
-              -H "Referer: https://www.nba.com/games" \
-              -H "Origin: https://www.nba.com" \
-              "$url" -o /tmp/raw.json 2>/dev/null || echo '{}' > /tmp/raw.json
+      - name: Fetch yesterday
+        run: |
+          curl -s -H "User-Agent: Mozilla/5.0" -H "Referer: https://www.nba.com/" "https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_1.json" -o /tmp/y.json || echo "{}" > /tmp/y.json
+          python3 -c "import json,sys; d=json.load(open('/tmp/y.json')); d['fetched_at']='$(date -u +%Y-%m-%dT%H:%M:%SZ)'; open('data/scoreboard-yesterday.js','w').write('var NBA_SCOREBOARD='+json.dumps(d)+';')" 2>/dev/null || true
 
-            python3 << PYEOF
-import json, sys
-from datetime import datetime, timezone
-try:
-    with open('/tmp/raw.json') as f:
-        data = json.load(f)
-    if 'scoreboard' not in data:
-        raise ValueError('No scoreboard key')
-    data['fetched_at'] = datetime.now(timezone.utc).isoformat()
-    with open('$outjs', 'w') as f:
-        f.write('var NBA_SCOREBOARD = ' + json.dumps(data) + ';')
-    print('OK: $outjs')
-except Exception as e:
-    print(f'WARN: {e} — keeping existing file')
-    sys.exit(0)
-PYEOF
-          }
-
-          fetch_day \
-            "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json" \
-            "data/scoreboard-data.js"
-
-          fetch_day \
-            "https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_1.json" \
-            "data/scoreboard-yesterday.js"
-
-          fetch_day \
-            "https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_2.json" \
-            "data/scoreboard-tomorrow.js"
+      - name: Fetch tomorrow
+        run: |
+          curl -s -H "User-Agent: Mozilla/5.0" -H "Referer: https://www.nba.com/" "https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_2.json" -o /tmp/tm.json || echo "{}" > /tmp/tm.json
+          python3 -c "import json,sys; d=json.load(open('/tmp/tm.json')); d['fetched_at']='$(date -u +%Y-%m-%dT%H:%M:%SZ)'; open('data/scoreboard-tomorrow.js','w').write('var NBA_SCOREBOARD='+json.dumps(d)+';')" 2>/dev/null || true
 
       - name: Commit and push
         run: |
-          git config user.name  "github-actions[bot]"
+          git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/
-          git diff --cached --quiet && echo "Sin cambios" && exit 0
+          git diff --cached --quiet && exit 0
           git commit -m "chore: scoreboard $(date -u '+%H:%M UTC')"
           git push
