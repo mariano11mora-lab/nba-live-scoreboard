@@ -304,17 +304,44 @@ function rerender() {
     return;
   }
 
-  // Fade out suave antes del re-render
-  grid.style.opacity = '0.6';
-  requestAnimationFrame(() => {
-    grid.innerHTML = filtered.map((g,i) => {
-      const wrap = document.createElement('div');
-      wrap.innerHTML = buildCard(g, i);
-      const card = wrap.firstElementChild;
-      card.style.animation = 'none';
-      return card.outerHTML;
-    }).join('');
-    grid.style.opacity = '1';
+  // ── FLIP: First ──
+  const firstPos = {};
+  grid.querySelectorAll('.card[data-game-id]').forEach(card => {
+    firstPos[card.dataset.gameId] = card.getBoundingClientRect();
+  });
+
+  // ── Re-render ──
+  grid.innerHTML = filtered.map((g, i) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = buildCard(g, i);
+    const card = wrap.firstElementChild;
+    card.style.animation = 'none';
+    return card.outerHTML;
+  }).join('');
+
+  // ── FLIP: Last → Invert → Play ──
+  grid.querySelectorAll('.card[data-game-id]').forEach(card => {
+    const id   = card.dataset.gameId;
+    const first = firstPos[id];
+    if (!first) return; // card nueva, sin posición previa → aparece normal
+
+    const last   = card.getBoundingClientRect();
+    const deltaX = first.left - last.left;
+    const deltaY = first.top  - last.top;
+
+    if (deltaX === 0 && deltaY === 0) return; // no se movió
+
+    // Invert: poner la card donde estaba
+    card.style.transition = 'none';
+    card.style.transform  = `translate(${deltaX}px, ${deltaY}px)`;
+
+    // Play: animar hacia la posición nueva
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        card.style.transition = 'transform 0.35s ease';
+        card.style.transform  = '';
+      });
+    });
   });
 }
 
@@ -480,7 +507,7 @@ function buildCard(game, idx) {
   }
 
   return `
-  <div class="card${info.type==='live'?' is-live':''}${clutch?' clutch':''}" style="animation-delay:${delay}s" data-id="${game.gameId}">
+  <div class="card${info.type==='live'?' is-live':''}${clutch?' clutch':''}" style="animation-delay:${delay}s" data-id="${game.gameId}" data-game-id="${game.gameId}">
 
     <div class="card-top">
       ${pillHTML(info, game)}
