@@ -10,19 +10,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Fetch today
         run: |
           mkdir -p data
           curl -s -H "User-Agent: Mozilla/5.0" "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json" -o /tmp/t.json
-          python3 -c "import json; d=json.load(open('/tmp/t.json')); open('data/scoreboard-data.js','w').write('var NBA_SCOREBOARD='+json.dumps(d)+';')"
+          python3 -c "import json; d=json.load(open('/tmp/t.json')); open('data/scoreboard-data.js','w').write('var NBA_SCOREBOARD='+json.dumps(d)+';')" || true
+
       - name: Fetch yesterday
         run: |
           curl -s -H "User-Agent: Mozilla/5.0" "https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_1.json" -o /tmp/y.json
-          python3 -c "import json; d=json.load(open('/tmp/y.json')); open('data/scoreboard-yesterday.js','w').write('var NBA_SCOREBOARD='+json.dumps(d)+';')"
+          python3 -c "import json; d=json.load(open('/tmp/y.json')); open('data/scoreboard-yesterday.js','w').write('var NBA_SCOREBOARD='+json.dumps(d)+';')" || true
+
       - name: Fetch tomorrow
         run: |
           curl -s -H "User-Agent: Mozilla/5.0" "https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_2.json" -o /tmp/tm.json
-          python3 -c "import json; d=json.load(open('/tmp/tm.json')); open('data/scoreboard-tomorrow.js','w').write('var NBA_SCOREBOARD='+json.dumps(d)+';')"
+          python3 -c "import json; d=json.load(open('/tmp/tm.json')); open('data/scoreboard-tomorrow.js','w').write('var NBA_SCOREBOARD='+json.dumps(d)+';')" || true
+
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
