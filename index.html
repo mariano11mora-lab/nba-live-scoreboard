@@ -163,19 +163,6 @@
 
     @media(max-width:580px){ header{padding:18px 16px 14px} .logo{font-size:1.65rem} main{padding:22px 12px 44px} }
 
-    /* ── Nav días ── */
-    #day-nav {
-      display:flex; gap:4px; margin-bottom:16px;
-    }
-    .day-btn {
-      font-family:'DM Mono',monospace; font-size:.62rem; letter-spacing:.1em;
-      text-transform:uppercase; padding:4px 14px; border-radius:99px; cursor:pointer;
-      border:1px solid var(--border); background:transparent; color:var(--muted);
-      transition:all .2s;
-    }
-    .day-btn.active { color:var(--text); border-color:#4a4a62; font-weight:600 }
-    .day-btn:hover:not(.active) { color:var(--text); border-color:#3a3a52 }
-
     /* ── Favoritos toggle ── */
     #filter-bar {
       display:flex; gap:8px; margin-bottom:20px;
@@ -215,11 +202,6 @@
 
 <main>
   <p class="section-label" id="date-label">Partidos de hoy</p>
-  <div id="day-nav">
-    <button class="day-btn" data-day="yesterday" onclick="setDay('yesterday')">Ayer</button>
-    <button class="day-btn active" data-day="today" onclick="setDay('today')">Hoy</button>
-    <button class="day-btn" data-day="tomorrow"  onclick="setDay('tomorrow')">Mañana</button>
-  </div>
   <div id="filter-bar">
     <button class="filter-btn active" data-filter="all"   onclick="setFilter('all')">Todos</button>
     <button class="filter-btn"        data-filter="favs"  onclick="setFilter('favs')">⭐ Favoritos</button>
@@ -363,46 +345,25 @@ function rerender() {
   });
 }
 
-/* ── Vista activa (today / yesterday / tomorrow) ── */
+const DAY_LABELS = { today:'Hoy' };
 let currentView = 'today';
 
-const DAY_SCRIPTS = {
-  today:     { file: './data/scoreboard-data.js',      varName: 'NBA_SCOREBOARD' },
-  yesterday: { file: './data/scoreboard-yesterday.js', varName: 'NBA_SCOREBOARD' },
-  tomorrow:  { file: './data/scoreboard-tomorrow.js',  varName: 'NBA_SCOREBOARD' },
-};
-
-const DAY_LABELS = { today:'Hoy', yesterday:'Ayer', tomorrow:'Mañana' };
-
-function setDay(day) {
-  currentView = day;
-  document.querySelectorAll('.day-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.day === day)
-  );
-  // Auto-refresh solo en hoy
-  clearInterval(fetchInt);
-  if (day === 'today') {
-    fetchInt = setInterval(() => { loadGames(false); startBar(); }, REFRESH);
-  }
-  lastGames = [];
-  loadGames(true);
-}
-
-/* ── Fetch via script tag local para los tres días (sin CORS) ── */
+/* ── Fetch via script tag con cache-bust agresivo ── */
 async function fetchNBA() {
-  const { file, varName } = DAY_SCRIPTS[currentView];
   return new Promise((resolve, reject) => {
+    // Eliminar script y variable anteriores
     const old = document.getElementById('nba-data-script');
     if (old) old.remove();
-    if (window[varName]) delete window[varName];
+    try { delete window.NBA_SCOREBOARD; } catch(e) {}
 
-    const script     = document.createElement('script');
-    script.id        = 'nba-data-script';
-    script.src       = file + '?t=' + Date.now();
-    script.onload    = () => typeof window[varName] !== 'undefined'
-      ? resolve(window[varName])
-      : reject(new Error(varName + ' no definido en ' + file));
-    script.onerror   = () => reject(new Error('No se pudo cargar ' + file));
+    const script  = document.createElement('script');
+    script.id     = 'nba-data-script';
+    // Cache-bust con timestamp + número random para garantizar request fresco
+    script.src    = './data/scoreboard-data.js?t=' + Date.now() + '&r=' + Math.random();
+    script.onload = () => typeof window.NBA_SCOREBOARD !== 'undefined'
+      ? resolve(window.NBA_SCOREBOARD)
+      : reject(new Error('NBA_SCOREBOARD no definido'));
+    script.onerror = () => reject(new Error('No se pudo cargar scoreboard-data.js'));
     document.head.appendChild(script);
   });
 }
@@ -600,21 +561,16 @@ setInterval(tickClock, 1000); tickClock();
 
 /* ── Render con datos reales ── */
 function renderGames(games, first) {
-  // Usar la fecha del scoreboard si está disponible, sino calcular
+  // Usar la fecha del scoreboard si está disponible
   let dateStr;
   const sbDate = games.length && games[0]._gameDate;
   if (sbDate) {
-    // gameDate viene como "2026-03-21"
     const [y,m,d] = sbDate.split('-');
     dateStr = d + '/' + m + '/' + y;
   } else {
-    const base = new Date();
-    if (currentView === 'yesterday') base.setDate(base.getDate() - 1);
-    if (currentView === 'tomorrow')  base.setDate(base.getDate() + 1);
-    dateStr = base.toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit', year:'numeric'});
+    dateStr = new Date().toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit', year:'numeric'});
   }
-  document.getElementById('date-label').textContent =
-    DAY_LABELS[currentView] + ' · ' + dateStr;
+  document.getElementById('date-label').textContent = 'HOY · ' + dateStr;
 
   document.getElementById('state-wrap').classList.remove('show');
 
