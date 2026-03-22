@@ -47,7 +47,7 @@
     .card {
       background:var(--surface); border:1px solid var(--border); border-radius:14px;
       padding:18px 16px 14px; display:flex; flex-direction:column; gap:12px;
-      transition:border-color .2s, transform .2s; animation:up .38s ease both
+      transition:border-color .2s, transform .35s ease, opacity .25s ease; animation:up .38s ease both
     }
     @keyframes up { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
     .card:hover { border-color:#2a2a3e; transform:translateY(-2px) }
@@ -80,7 +80,7 @@
     .pill-live::before { content:''; width:5px; height:5px; border-radius:50%; background:var(--red); animation:blink 1.2s ease-in-out infinite }
 
     /* ── CARD LAYOUT ── */
-    .card-top { margin-bottom:0 }
+    .card-top { margin-bottom:0; display:flex; justify-content:space-between; align-items:center }
     .period-info { display:none }
     .tname { display:none }
 
@@ -187,8 +187,6 @@
     }
     .fav-btn:hover   { background:rgba(200,255,0,.15); transform:scale(1.1) }
     .fav-btn.active  { background:var(--accent); border-color:var(--accent); color:#0a0a0f }
-    .team-row { display:flex; align-items:center; gap:4px; overflow:hidden }
-    .team.away .team-row { flex-direction:row-reverse }
     .tricode { min-width:0 }
   </style>
 </head>
@@ -231,12 +229,49 @@ function getFavorites() {
   catch { return []; }
 }
 function isFavorite(code) { return getFavorites().includes(code); }
-function toggleFavorite(code) {
-  const favs = getFavorites();
-  const idx  = favs.indexOf(code);
-  if (idx === -1) favs.push(code); else favs.splice(idx, 1);
+function isGameFav(game) {
+  return isFavorite(game.awayTeam.tricode) || isFavorite(game.homeTeam.tricode);
+}
+
+// Toggle por partido: si alguno es fav → quitar ambos; si ninguno → agregar ambos
+function toggleGameFav(awayCode, homeCode) {
+  let favs = getFavorites();
+  const anyFav = favs.includes(awayCode) || favs.includes(homeCode);
+  if (anyFav) {
+    favs = favs.filter(c => c !== awayCode && c !== homeCode);
+  } else {
+    if (!favs.includes(awayCode)) favs.push(awayCode);
+    if (!favs.includes(homeCode)) favs.push(homeCode);
+  }
   localStorage.setItem('favoriteTeams', JSON.stringify(favs));
   rerender();
+}
+
+/* ── Parseo de reloj a segundos ── */
+function clockSeconds(iso) {
+  const m = (iso||'').match(/PT(\d+)M([\d.]+)S/);
+  return m ? parseInt(m[1])*60 + Math.floor(parseFloat(m[2])) : 999;
+}
+
+/* ── Orden inteligente ── */
+function sortGames(games) {
+  const statusOrder = g => g.gameStatus === 2 ? 0 : g.gameStatus === 1 ? 1 : 2;
+
+  // Orden live: mayor period primero, menor tiempo restante primero
+  const liveOrder = g => {
+    if (g.gameStatus !== 2) return 0;
+    return -(g.period * 10000) + clockSeconds(g.gameClock);
+  };
+
+  return [...games].sort((a, b) => {
+    const aFav = isGameFav(a) ? 0 : 1;
+    const bFav = isGameFav(b) ? 0 : 1;
+    if (aFav !== bFav) return aFav - bFav;          // favoritos primero
+    const aSt = statusOrder(a), bSt = statusOrder(b);
+    if (aSt !== bSt) return aSt - bSt;              // live > soon > final
+    if (a.gameStatus === 2) return liveOrder(a) - liveOrder(b); // orden live
+    return 0;
+  });
 }
 
 /* ── Filtro activo ── */
@@ -253,17 +288,14 @@ function setFilter(f) {
 
 function applyFilter(games) {
   if (activeFilter === 'all') return games;
-  return games.filter(g =>
-    isFavorite(g.awayTeam.tricode) || isFavorite(g.homeTeam.tricode)
-  );
+  return games.filter(g => isGameFav(g));
 }
 
 function rerender() {
   if (!lastGames.length) return;
-  const statusOrder = g => g.gameStatus === 2 ? 0 : g.gameStatus === 1 ? 1 : 2;
-  const sorted   = [...lastGames].sort((a,b) => statusOrder(a) - statusOrder(b));
+  const sorted   = sortGames(lastGames);
   const filtered = applyFilter(sorted);
-  const grid = document.getElementById('grid');
+  const grid     = document.getElementById('grid');
 
   if (!filtered.length) {
     grid.innerHTML = `<p style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);letter-spacing:.07em">
@@ -271,13 +303,19 @@ function rerender() {
     </p>`;
     return;
   }
-  grid.innerHTML = filtered.map((g,i) => {
-    const wrap = document.createElement('div');
-    wrap.innerHTML = buildCard(g, i);
-    const card = wrap.firstElementChild;
-    card.style.animation = 'none';
-    return card.outerHTML;
-  }).join('');
+
+  // Fade out suave antes del re-render
+  grid.style.opacity = '0.6';
+  requestAnimationFrame(() => {
+    grid.innerHTML = filtered.map((g,i) => {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = buildCard(g, i);
+      const card = wrap.firstElementChild;
+      card.style.animation = 'none';
+      return card.outerHTML;
+    }).join('');
+    grid.style.opacity = '1';
+  });
 }
 
 /* ── Cargar scoreboard-data.js dinámicamente con cache-bust en cada refresh ── */
@@ -444,30 +482,21 @@ function buildCard(game, idx) {
   return `
   <div class="card${info.type==='live'?' is-live':''}${clutch?' clutch':''}" style="animation-delay:${delay}s" data-id="${game.gameId}">
 
-    <div class="card-top">${pillHTML(info, game)}</div>
+    <div class="card-top">
+      ${pillHTML(info, game)}
+      <button class="fav-btn${isGameFav(game)?' active':''}" onclick="toggleGameFav('${away.tricode}','${home.tricode}')" title="Favorito">
+        ${isGameFav(game)?'★':'☆'}
+      </button>
+    </div>
 
     ${gameTimeHTML}
 
     ${recordsHTML}
 
     <div class="${info.type==='soon' ? 'matchup-soon' : 'matchup'}">
-      <div class="team away">
-        <div class="team-row">
-          <div class="tricode tc-away">${away.tricode}</div>
-          <button class="fav-btn${isFavorite(away.tricode)?' active':''}" onclick="toggleFavorite('${away.tricode}')" title="Favorito">
-            ${isFavorite(away.tricode)?'★':'☆'}
-          </button>
-        </div>
-      </div>
+      <div class="team away"><div class="tricode tc-away">${away.tricode}</div></div>
       ${center}
-      <div class="team home">
-        <div class="team-row">
-          <div class="tricode tc-home">${home.tricode}</div>
-          <button class="fav-btn${isFavorite(home.tricode)?' active':''}" onclick="toggleFavorite('${home.tricode}')" title="Favorito">
-            ${isFavorite(home.tricode)?'★':'☆'}
-          </button>
-        </div>
-      </div>
+      <div class="team home"><div class="tricode tc-home">${home.tricode}</div></div>
     </div>
 
     ${tipoffHTML}
