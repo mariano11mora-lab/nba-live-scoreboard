@@ -8,13 +8,12 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg:#07070c; --surface:#0f0f17; --border:#1c1c2a;
+      --bg:#080a0f; --surface:#141925; --border:rgba(255,255,255,0.05);
       --accent:#c8ff00; --red:#ff3b3b; --text:#e8e8f0; --muted:#5a5a72;
     }
     *, *::before, *::after { box-sizing:border-box; margin:0; padding:0 }
     body {
-      background:
-        radial-gradient(ellipse 80% 50% at 50% 0%, #0f0f1e 0%, var(--bg) 70%);
+      background: radial-gradient(circle at 30% 0%, #1a2030 0%, #080a0f 60%);
       color:var(--text); font-family:'DM Sans',sans-serif; min-height:100vh;
     }
     body::before {
@@ -57,26 +56,26 @@
     #grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:16px }
 
     .card {
-      background:var(--surface);
-      border:1px solid rgba(255,255,255,.055);
+      background:#141925;
+      border:1px solid rgba(255,255,255,0.05);
       border-radius:14px;
       padding:18px 16px 14px; display:flex; flex-direction:column; gap:12px;
-      box-shadow: 0 2px 4px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
       transition:border-color .2s, transform .35s ease, opacity .25s ease, box-shadow .2s;
       animation:up .38s ease both;
       position:relative; overflow:hidden;
     }
-    /* Highlight superior — borde de luz en el top */
+    /* Highlight superior — destello de luz visible */
     .card::before {
-      content:''; position:absolute; top:0; left:10%; right:10%; height:1px;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent);
+      content:''; position:absolute; inset:0; border-radius:inherit;
+      background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 50%);
       pointer-events:none;
     }
     @keyframes up { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
     .card:hover {
       border-color:rgba(255,255,255,.1);
-      transform:translateY(-2px);
-      box-shadow: 0 4px 8px rgba(0,0,0,.4), 0 16px 40px rgba(0,0,0,.4);
+      transform:translateY(-3px);
+      box-shadow: 0 28px 50px rgba(0,0,0,0.7);
     }
     .card.is-live { border-color:rgba(255,59,59,.45); box-shadow:0 2px 4px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35), 0 0 30px rgba(255,59,59,.08) }
     .card.clutch  { border-color:rgba(255,59,59,.8);  box-shadow:0 2px 4px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35), 0 0 22px rgba(255,59,59,.18) }
