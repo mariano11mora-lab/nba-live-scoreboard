@@ -179,11 +179,14 @@
 
     /* ── Estrella favorito ── */
     .fav-btn {
-      background:none; border:none; cursor:pointer; padding:0; line-height:1;
-      font-size:.85rem; opacity:.35; transition:opacity .2s, transform .15s;
+      background:none; cursor:pointer; line-height:1;
+      font-size:.75rem; transition:transform .15s, background .2s, border-color .2s;
+      width:20px; height:20px; border-radius:4px;
+      display:flex; align-items:center; justify-content:center;
+      border:1px solid var(--accent); color:var(--accent);
     }
-    .fav-btn:hover   { opacity:.7; transform:scale(1.15) }
-    .fav-btn.active  { opacity:1 }
+    .fav-btn:hover   { background:rgba(200,255,0,.15); transform:scale(1.1) }
+    .fav-btn.active  { background:var(--accent); border-color:var(--accent); color:#0a0a0f }
     .team-row { display:flex; align-items:center; gap:5px }
     .team.away .team-row { flex-direction:row-reverse }
   </style>
