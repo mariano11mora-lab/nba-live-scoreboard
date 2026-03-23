@@ -1,17 +1,13 @@
 name: Update NBA Scoreboard
-
 on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
-
 permissions:
   contents: write
-
 jobs:
   fetch:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -21,103 +17,94 @@ jobs:
       - name: Fetch all three days
         run: |
           python3 << 'PYEOF'
-          import json
-          from datetime import datetime, timedelta, timezone
-          from nba_api.live.nba.endpoints import scoreboard
-          from nba_api.stats.endpoints import scoreboardv2
+import json, os
+from datetime import datetime, timedelta, timezone
+from nba_api.stats.endpoints import scoreboardv2
 
-          def normalize_live(data):
-              return data
+os.makedirs('data', exist_ok=True)
 
-          def fetch_by_date(date_str):
-              try:
-                  sb = scoreboardv2.ScoreboardV2(game_date=date_str, league_id='00')
-                  data = sb.get_dict()
-                  games_raw = next((r for r in data['resultSets'] if r['name'] == 'GameHeader'), None)
-                  line_raw  = next((r for r in data['resultSets'] if r['name'] == 'LineScore'), None)
+def fetch_by_date(date_str, out_path):
+    try:
+        sb = scoreboardv2.ScoreboardV2(game_date=date_str, league_id='00')
+        data = sb.get_dict()
 
-                  if not games_raw or not line_raw:
-                      return {"scoreboard": {"games": []}}
+        game_headers = next(r for r in data['resultSets'] if r['name'] == 'GameHeader')
+        line_scores  = next(r for r in data['resultSets'] if r['name'] == 'LineScore')
 
-                  g_headers = games_raw['headers']
-                  l_headers = line_raw['headers']
+        gh = game_headers['headers']
+        lh = line_scores['headers']
 
-                  scores = {}
-                  for row in line_raw['rowSet']:
-                      r = dict(zip(l_headers, row))
-                      gid = r['GAME_ID']
-                      if gid not in scores:
-                          scores[gid] = {}
+        # Mapear scores por GAME_ID, preservando orden (away=primero, home=segundo)
+        scores = {}
+        for row in line_scores['rowSet']:
+            r = dict(zip(lh, row))
+            gid = r['GAME_ID']
+            if gid not in scores:
+                scores[gid] = []
+            wl = r.get('TEAM_WINS_LOSSES') or '0-0'
+            wins, losses = wl.split('-') if '-' in wl else ('0','0')
+            scores[gid].append({
+                'teamTricode': r['TEAM_ABBREVIATION'],
+                'score': int(r['PTS'] or 0),
+                'wins': int(wins),
+                'losses': int(losses),
+                'periods': []
+            })
 
-                      team_type = 'away' if len(scores[gid]) == 0 else 'home'
+        games = []
+        for row in game_headers['rowSet']:
+            r = dict(zip(gh, row))
+            gid = r['GAME_ID']
+            sc = scores.get(gid, [{}, {}])
+            away = sc[0] if len(sc) > 0 else {}
+            home = sc[1] if len(sc) > 1 else {}
+            status = int(r.get('GAME_STATUS_ID') or 1)
+            games.append({
+                'gameId':       gid,
+                'gameStatus':   status,
+                'gameTimeUTC':  r.get('GAME_DATE_EST'),
+                'period':       int(r.get('LIVE_PERIOD') or 0),
+                'gameClock':    '',
+                'awayScore':    away.get('score', 0),
+                'homeScore':    home.get('score', 0),
+                'awayPeriods':  [],
+                'homePeriods':  [],
+                'awayTeam':     away,
+                'homeTeam':     home,
+                'gameEt':       r.get('GAME_DATE_EST',''),
+            })
 
-                      scores[gid][team_type] = {
-                          'teamTricode': r['TEAM_ABBREVIATION'],
-                          'score': r['PTS'] or 0,
-                          'wins': r['TEAM_WINS_LOSSES'].split('-')[0] if r['TEAM_WINS_LOSSES'] else 0,
-                          'losses': r['TEAM_WINS_LOSSES'].split('-')[1] if r['TEAM_WINS_LOSSES'] else 0,
-                          'periods': []
-                      }
+        result = {
+            'scoreboard': {'gameDate': date_str, 'games': games},
+            'fetched_at': datetime.now(timezone.utc).isoformat()
+        }
+        with open(out_path, 'w') as f:
+            f.write('var NBA_SCOREBOARD = ' + json.dumps(result) + ';')
+        print(f"OK: {out_path} — {len(games)} games")
+    except Exception as e:
+        print(f"ERROR {date_str}: {e}")
 
-                  games = []
-                  for row in games_raw['rowSet']:
-                      r = dict(zip(g_headers, row))
-                      gid = r['GAME_ID']
-                      sc = scores.get(gid, {})
-                      status = r['GAME_STATUS_ID']
+# HOY via live endpoint
+try:
+    import urllib.request
+    req = urllib.request.Request(
+        'https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json',
+        headers={'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.nba.com/'}
+    )
+    with urllib.request.urlopen(req, timeout=10) as r:
+        today_data = json.loads(r.read())
+    today_data['fetched_at'] = datetime.now(timezone.utc).isoformat()
+    with open('data/scoreboard-data.js', 'w') as f:
+        f.write('var NBA_SCOREBOARD = ' + json.dumps(today_data) + ';')
+    print("OK: today")
+except Exception as e:
+    print(f"Today failed: {e}")
 
-                      games.append({
-                          'gameId': gid,
-                          'gameStatus': int(status),
-                          'gameStatusText': r.get('GAME_STATUS_TEXT', ''),
-                          'gameTimeUTC': None,
-                          'period': r.get('LIVE_PERIOD', 0),
-                          'gameClock': '',
-                          'awayScore': int(sc.get('away', {}).get('score', 0) or 0),
-                          'homeScore': int(sc.get('home', {}).get('score', 0) or 0),
-                          'awayPeriods': [],
-                          'homePeriods': [],
-                          'awayTeam': sc.get('away', {'teamTricode':'???','wins':0,'losses':0,'periods':[]}),
-                          'homeTeam': sc.get('home', {'teamTricode':'???','wins':0,'losses':0,'periods':[]}),
-                          'gameEt': r.get('GAME_DATE_EST',''),
-                      })
-
-                  return {"scoreboard": {"gameDate": date_str, "games": games}}
-
-              except Exception as e:
-                  print(f"Error fetching {date_str}: {e}")
-                  return {"scoreboard": {"gameDate": date_str, "games": []}}
-
-          def save_js(data, path):
-              data['fetched_at'] = datetime.now(timezone.utc).isoformat()
-              with open(path, 'w') as f:
-                  f.write('var NBA_SCOREBOARD = ' + json.dumps(data) + ';')
-              print(f"Saved {path}")
-
-          import os
-          os.makedirs('data', exist_ok=True)
-
-          # HOY
-          try:
-              import urllib.request
-              url = 'https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json'
-              req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.nba.com/'})
-              with urllib.request.urlopen(req, timeout=10) as r:
-                  today_data = json.loads(r.read())
-              save_js(today_data, 'data/scoreboard-data.js')
-          except Exception as e:
-              print(f"Today live fetch failed: {e}")
-
-          # AYER y MAÑANA
-          today = datetime.now(timezone.utc).date()
-          yesterday = (today - timedelta(days=1)).strftime('%Y-%m-%d')
-          tomorrow  = (today + timedelta(days=1)).strftime('%Y-%m-%d')
-
-          save_js(fetch_by_date(yesterday), 'data/scoreboard-yesterday.js')
-          save_js(fetch_by_date(tomorrow),  'data/scoreboard-tomorrow.js')
-
-          print("Done")
-          PYEOF
+# AYER y MAÑANA
+today = datetime.now(timezone.utc).date()
+fetch_by_date(str(today - timedelta(days=1)), 'data/scoreboard-yesterday.js')
+fetch_by_date(str(today + timedelta(days=1)), 'data/scoreboard-tomorrow.js')
+PYEOF
 
       - name: Commit and push
         run: |
