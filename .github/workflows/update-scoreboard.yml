@@ -10,13 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Install nba_api
         run: pip install nba_api --break-system-packages -q
-
       - name: Fetch scoreboards
         run: python3 fetch_scores.py
-
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
