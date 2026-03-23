@@ -476,30 +476,40 @@ async function fetchNBA() {
   });
 }
 
-/* ── Normalizar partido de la API real al formato que espera el render ── */
+/* ── Normalizar partido — soporta formato live y scoreboardv2 ── */
 function normalizeGame(g) {
-  const home = g.homeTeam, away = g.awayTeam;
+  const home = g.homeTeam ?? {}, away = g.awayTeam ?? {};
+
+  // Periods: live usa [{score:N}], scoreboardv2 ya genera []
+  const normPeriods = (p) => Array.isArray(p)
+    ? p.map(x => typeof x === 'object' ? (x.score ?? 0) : (x ?? 0))
+    : [];
+
+  // Tricode: live usa teamTricode, scoreboardv2 usa teamTricode también
+  const awayCode = away.teamTricode ?? away.tricode ?? '???';
+  const homeCode = home.teamTricode ?? home.tricode ?? '???';
+
   return {
     gameId:      g.gameId,
-    gameStatus:  g.gameStatus,           // 1=programado 2=vivo 3=final
+    gameStatus:  g.gameStatus ?? 1,
     gameTimeUTC: g.gameTimeUTC ?? null,
     period:      g.period ?? 0,
     gameClock:   g.gameClock ?? '',
     awayScore:   away.score ?? 0,
     homeScore:   home.score ?? 0,
-    awayPeriods: (away.periods ?? []).map(p => p.score ?? 0),
-    homePeriods: (home.periods ?? []).map(p => p.score ?? 0),
+    awayPeriods: normPeriods(away.periods),
+    homePeriods: normPeriods(home.periods),
     awayTeam: {
-      tricode: away.teamTricode,
+      tricode: awayCode,
       wins:    away.wins    ?? 0,
       losses:  away.losses  ?? 0,
     },
     homeTeam: {
-      tricode: home.teamTricode,
+      tricode: homeCode,
       wins:    home.wins    ?? 0,
       losses:  home.losses  ?? 0,
     },
-    _gameDate: g.gameEt?.split('T')[0] ?? null,
+    _gameDate: g.gameEt?.split('T')[0] ?? g.gameTimeUTC?.split('T')[0] ?? null,
   };
 }
 
