@@ -11,26 +11,112 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch today
-        run: |
-          mkdir -p data
-          curl -s -H "User-Agent: Mozilla/5.0" "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json" -o /tmp/t.json
-          python3 -c "import json; d=json.load(open('/tmp/t.json')); open('data/scoreboard-data.js','w').write('var NBA_SCOREBOARD='+json.dumps(d)+';')" || true
+      - name: Install nba_api
+        run: pip install nba_api --break-system-packages -q
 
-      - name: Fetch yesterday
+      - name: Fetch all three days
         run: |
-          curl -s -H "User-Agent: Mozilla/5.0" "https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_1.json" -o /tmp/y.json
-          python3 -c "import json; d=json.load(open('/tmp/y.json')); open('data/scoreboard-yesterday.js','w').write('var NBA_SCOREBOARD='+json.dumps(d)+';')" || true
+          python3 << 'PYEOF'
+import json
+from datetime import datetime, timedelta, timezone
+from nba_api.live.nba.endpoints import scoreboard
+from nba_api.stats.endpoints import scoreboardv2
 
-      - name: Fetch tomorrow
-        run: |
-          curl -s -H "User-Agent: Mozilla/5.0" "https://cdn.nba.com/static/json/liveData/scoreboard/scoreboard_2.json" -o /tmp/tm.json
-          python3 -c "import json; d=json.load(open('/tmp/tm.json')); open('data/scoreboard-tomorrow.js','w').write('var NBA_SCOREBOARD='+json.dumps(d)+';')" || true
+def normalize_live(data):
+    """Normaliza el formato live (hoy) al formato estándar"""
+    return data
+
+def fetch_by_date(date_str):
+    """Obtiene partidos de una fecha específica (YYYY-MM-DD) via scoreboardv2"""
+    try:
+        sb = scoreboardv2.ScoreboardV2(game_date=date_str, league_id='00')
+        data = sb.get_dict()
+        games_raw = next((r for r in data['resultSets'] if r['name'] == 'GameHeader'), None)
+        line_raw  = next((r for r in data['resultSets'] if r['name'] == 'LineScore'), None)
+        if not games_raw or not line_raw:
+            return {"scoreboard": {"games": []}}
+
+        g_headers = games_raw['headers']
+        l_headers = line_raw['headers']
+
+        # Mapear scores por gameId
+        scores = {}
+        for row in line_raw['rowSet']:
+            r = dict(zip(l_headers, row))
+            gid = r['GAME_ID']
+            if gid not in scores:
+                scores[gid] = {}
+            team_type = 'away' if len(scores[gid]) == 0 else 'home'
+            scores[gid][team_type] = {
+                'teamTricode': r['TEAM_ABBREVIATION'],
+                'score': r['PTS'] or 0,
+                'wins': r['TEAM_WINS_LOSSES'].split('-')[0] if r['TEAM_WINS_LOSSES'] else 0,
+                'losses': r['TEAM_WINS_LOSSES'].split('-')[1] if r['TEAM_WINS_LOSSES'] else 0,
+                'periods': []
+            }
+
+        games = []
+        for row in games_raw['rowSet']:
+            r = dict(zip(g_headers, row))
+            gid = r['GAME_ID']
+            sc = scores.get(gid, {})
+            status = r['GAME_STATUS_ID']  # 1=pre, 2=live, 3=final
+            games.append({
+                'gameId': gid,
+                'gameStatus': int(status),
+                'gameStatusText': r.get('GAME_STATUS_TEXT', ''),
+                'gameTimeUTC': r.get('GAME_DATE_EST', '') + 'T' + r.get('GAME_STATUS_TEXT', '00:00').replace(' ET','').strip() + ':00Z' if status == '1' else None,
+                'period': r.get('LIVE_PERIOD', 0),
+                'gameClock': '',
+                'awayScore': int(sc.get('away', {}).get('score', 0) or 0),
+                'homeScore': int(sc.get('home', {}).get('score', 0) or 0),
+                'awayPeriods': [],
+                'homePeriods': [],
+                'awayTeam': sc.get('away', {'teamTricode':'???','wins':0,'losses':0,'periods':[]}),
+                'homeTeam': sc.get('home', {'teamTricode':'???','wins':0,'losses':0,'periods':[]}),
+                'gameEt': r.get('GAME_DATE_EST',''),
+            })
+
+        return {"scoreboard": {"gameDate": date_str, "games": games}}
+    except Exception as e:
+        print(f"Error fetching {date_str}: {e}")
+        return {"scoreboard": {"gameDate": date_str, "games": []}}
+
+def save_js(data, path):
+    data['fetched_at'] = datetime.now(timezone.utc).isoformat()
+    with open(path, 'w') as f:
+        f.write('var NBA_SCOREBOARD = ' + json.dumps(data) + ';')
+    print(f"Saved {path}")
+
+import os
+os.makedirs('data', exist_ok=True)
+
+# HOY — via live endpoint (mismo que antes, más detallado)
+try:
+    import urllib.request
+    url = 'https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json'
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.nba.com/'})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        today_data = json.loads(r.read())
+    save_js(today_data, 'data/scoreboard-data.js')
+except Exception as e:
+    print(f"Today live fetch failed: {e}")
+
+# AYER y MAÑANA via scoreboardv2
+today = datetime.now(timezone.utc).date()
+yesterday = (today - timedelta(days=1)).strftime('%Y-%m-%d')
+tomorrow  = (today + timedelta(days=1)).strftime('%Y-%m-%d')
+
+save_js(fetch_by_date(yesterday), 'data/scoreboard-yesterday.js')
+save_js(fetch_by_date(tomorrow),  'data/scoreboard-tomorrow.js')
+
+print("Done")
+PYEOF
 
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/
-          git commit -m "chore: scoreboard $(date -u '+%Y-%m-%d %H:%M UTC')" || echo "commit failed"
-          git push || echo "push failed" 
+          git commit -m "chore: scoreboard $(date -u '+%H:%M UTC')" || echo "no changes"
+          git push || echo "push skipped"
