@@ -458,22 +458,68 @@ function setDay(day) {
   loadGames(true);
 }
 
-/* ── Fetch via script tag con cache-bust agresivo ── */
-async function fetchNBA() {
+/* ── Cargar archivo .js local con cache-bust ── */
+function loadLocalScript(src) {
   return new Promise((resolve, reject) => {
     const old = document.getElementById('nba-data-script');
     if (old) old.remove();
     try { delete window.NBA_SCOREBOARD; } catch(e) {}
-
     const script  = document.createElement('script');
     script.id     = 'nba-data-script';
-    script.src    = DAY_FILES[currentView] + '?t=' + Date.now() + '&r=' + Math.random();
+    script.src    = src + '?t=' + Date.now() + '&r=' + Math.random();
     script.onload = () => typeof window.NBA_SCOREBOARD !== 'undefined'
       ? resolve(window.NBA_SCOREBOARD)
       : reject(new Error('NBA_SCOREBOARD no definido'));
-    script.onerror = () => reject(new Error('No se pudo cargar ' + DAY_FILES[currentView]));
+    script.onerror = () => reject(new Error('No se pudo cargar ' + src));
     document.head.appendChild(script);
   });
+}
+
+/* ── Detectar si hay partidos en vivo en los datos ── */
+function hasLiveGames(data) {
+  return (data?.scoreboard?.games ?? []).some(g => g.gameStatus === 2);
+}
+
+/* ── Proxies para fetch en tiempo real (solo cuando hay partidos live) ── */
+const NBA_LIVE_URL = 'https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json';
+const LIVE_PROXIES = [
+  u => fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(u)),
+  u => fetch('https://corsproxy.io/?url=' + encodeURIComponent(u)),
+  u => fetch('https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u)),
+];
+let workingProxy = 0;
+
+async function fetchLiveNow() {
+  const order = [workingProxy, ...[0,1,2].filter(i => i !== workingProxy)];
+  for (const idx of order) {
+    try {
+      const res = await LIVE_PROXIES[idx](NBA_LIVE_URL);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      workingProxy = idx;
+      return data;
+    } catch(e) {
+      console.warn('Proxy ' + idx + ' falló:', e.message);
+    }
+  }
+  return null; // todos fallaron
+}
+
+/* ── Fetch principal: híbrido local + live ── */
+async function fetchNBA() {
+  const localData = await loadLocalScript(DAY_FILES[currentView]);
+
+  // Solo intentar fetch live si: estamos en "hoy" Y hay partidos en vivo en los datos locales
+  if (currentView === 'today' && hasLiveGames(localData)) {
+    const liveData = await fetchLiveNow();
+    if (liveData) {
+      console.log('Usando datos live en tiempo real');
+      return liveData;
+    }
+    console.warn('Fetch live falló, usando datos locales');
+  }
+
+  return localData;
 }
 
 /* ── Normalizar partido — soporta formato live y scoreboardv2 ── */
@@ -761,7 +807,12 @@ async function loadGames(first=false) {
 loadGames(true);
 startBar();
 clearInterval(fetchInt);
-fetchInt = setInterval(() => { loadGames(false); startBar(); }, REFRESH);
+fetchInt = setInterval(async () => {
+  // Si hay partidos live, refrescar cada 30s; si no, respetar el ciclo normal de 5min
+  // (el cron-job ya dispara cada 2min, así que 30s es solo para el fetch live)
+  loadGames(false);
+  startBar();
+}, REFRESH);
 </script>
 </body>
 </html>
