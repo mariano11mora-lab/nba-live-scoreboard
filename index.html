@@ -458,21 +458,44 @@ function setDay(day) {
   loadGames(true);
 }
 
-/* ── Cargar archivo .js local con cache-bust ── */
-function loadLocalScript(src) {
-  return new Promise((resolve, reject) => {
-    const old = document.getElementById('nba-data-script');
-    if (old) old.remove();
-    try { delete window.NBA_SCOREBOARD; } catch(e) {}
-    const script  = document.createElement('script');
-    script.id     = 'nba-data-script';
-    script.src    = src + '?t=' + Date.now() + '&r=' + Math.random();
-    script.onload = () => typeof window.NBA_SCOREBOARD !== 'undefined'
-      ? resolve(window.NBA_SCOREBOARD)
-      : reject(new Error('NBA_SCOREBOARD no definido'));
-    script.onerror = () => reject(new Error('No se pudo cargar ' + src));
-    document.head.appendChild(script);
-  });
+/* ── URLs raw de GitHub (sin CDN cache) ── */
+const REPO_RAW = 'https://raw.githubusercontent.com/mariano11mora-lab/nba-live-scoreboard/main/';
+
+const DAY_RAW = {
+  today:     REPO_RAW + 'data/scoreboard-data.js',
+  yesterday: REPO_RAW + 'data/scoreboard-yesterday.js',
+  tomorrow:  REPO_RAW + 'data/scoreboard-tomorrow.js',
+};
+
+/* ── Cargar datos desde raw.githubusercontent.com (no tiene CDN cache) ── */
+async function loadLocalScript(src) {
+  // raw.githubusercontent.com tiene CORS abierto y no cachea agresivamente
+  const rawSrc = DAY_RAW[currentView] + '?t=' + Date.now();
+  try {
+    const res = await fetch(rawSrc, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    // Ejecutar el JS para definir window.NBA_SCOREBOARD
+    const fn = new Function(text);
+    fn();
+    if (typeof window.NBA_SCOREBOARD === 'undefined') throw new Error('NBA_SCOREBOARD no definido');
+    return window.NBA_SCOREBOARD;
+  } catch(e) {
+    // Fallback: script tag con la URL local
+    return new Promise((resolve, reject) => {
+      const old = document.getElementById('nba-data-script');
+      if (old) old.remove();
+      try { delete window.NBA_SCOREBOARD; } catch(err) {}
+      const script  = document.createElement('script');
+      script.id     = 'nba-data-script';
+      script.src    = src + '?t=' + Date.now() + '&r=' + Math.random();
+      script.onload = () => typeof window.NBA_SCOREBOARD !== 'undefined'
+        ? resolve(window.NBA_SCOREBOARD)
+        : reject(new Error('NBA_SCOREBOARD no definido'));
+      script.onerror = () => reject(new Error('No se pudo cargar ' + src));
+      document.head.appendChild(script);
+    });
+  }
 }
 
 /* ── Detectar si hay partidos en vivo en los datos ── */
