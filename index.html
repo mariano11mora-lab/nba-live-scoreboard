@@ -282,11 +282,10 @@
 
 <main>
   <p class="section-label" id="date-label">Partidos de hoy</p>
-  <div id="day-nav">
-    <button class="day-btn" data-day="yesterday" onclick="setDay('yesterday')">Ayer</button>
-    <button class="day-btn active" data-day="today"     onclick="setDay('today')">Hoy</button>
-    <button class="day-btn" data-day="tomorrow"  onclick="setDay('tomorrow')">Mañana</button>
-  </div>
+<div id="date-buttons">
+  <button id="today">Hoy</button>
+</div>
+
   <div id="filter-bar">
     <button class="filter-btn active" data-filter="all"   onclick="setFilter('all')">Todos</button>
     <button class="filter-btn"        data-filter="favs"  onclick="setFilter('favs')">⭐ Favoritos</button>
