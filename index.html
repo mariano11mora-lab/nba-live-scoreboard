@@ -231,17 +231,6 @@
 
     @media(max-width:580px){ header{padding:18px 16px 14px} .logo{font-size:1.65rem} main{padding:22px 12px 44px} }
 
-    /* ── Nav días ── */
-    #day-nav { display:flex; gap:4px; margin-bottom:16px }
-    .day-btn {
-      font-family:'DM Mono',monospace; font-size:.62rem; letter-spacing:.1em;
-      text-transform:uppercase; padding:4px 14px; border-radius:99px; cursor:pointer;
-      border:1px solid var(--border); background:transparent; color:var(--muted);
-      transition:all .2s;
-    }
-    .day-btn.active { color:var(--text); border-color:rgba(255,255,255,.2); font-weight:600 }
-    .day-btn:hover:not(.active) { color:var(--text); border-color:rgba(255,255,255,.1) }
-
     /* ── Favoritos toggle ── */
     #filter-bar {
       display:flex; gap:8px; margin-bottom:20px;
@@ -268,6 +257,45 @@
     .fav-btn.active  { background:var(--accent); border-color:var(--accent); color:#0a0a0f; animation:starBounce .3s ease }
     @keyframes starBounce { 0%{transform:scale(1)} 50%{transform:scale(1.35)} 100%{transform:scale(1)} }
     .tricode { min-width:0 }
+
+    /* ── Standings panel ── */
+    #standings-panel {
+      display:none; margin-bottom:28px;
+      display:none;
+    }
+    #standings-panel.open { display:grid; grid-template-columns:1fr 1fr; gap:16px }
+    .standings-conf { background:#141925; border:1px solid rgba(255,255,255,.05); border-radius:14px; overflow:hidden }
+    .standings-conf-title {
+      font-family:'Bebas Neue',cursive; font-size:1rem; letter-spacing:.14em;
+      padding:10px 14px; border-bottom:1px solid rgba(255,255,255,.06);
+      color:var(--accent);
+    }
+    .standings-table { width:100%; border-collapse:collapse }
+    .standings-table th {
+      font-family:'DM Mono',monospace; font-size:.48rem; color:#4a4a62;
+      letter-spacing:.1em; text-transform:uppercase;
+      padding:6px 14px; text-align:left; border-bottom:1px solid rgba(255,255,255,.04);
+    }
+    .standings-table th:not(:first-child) { text-align:right }
+    .standings-table td {
+      font-family:'DM Mono',monospace; font-size:.62rem; color:var(--muted);
+      padding:6px 14px; border-bottom:1px solid rgba(255,255,255,.03);
+    }
+    .standings-table td:not(:first-child) { text-align:right }
+    .standings-table tr:last-child td { border-bottom:none }
+    .standings-table .td-team { color:var(--text); font-weight:500; display:flex; align-items:center; gap:6px }
+    .standings-table .td-rank { color:#4a4a62; font-size:.55rem; width:16px }
+    .standings-table .td-gb { color:var(--muted) }
+    .standings-table tr.playoff-line td { border-bottom:1px solid rgba(200,255,0,.2) }
+    .standings-btn {
+      font-family:'DM Mono',monospace; font-size:.62rem; letter-spacing:.1em;
+      text-transform:uppercase; padding:4px 14px; border-radius:99px; cursor:pointer;
+      border:1px solid var(--border); background:transparent; color:var(--muted);
+      transition:all .2s; margin-bottom:16px;
+    }
+    .standings-btn.open { color:var(--accent); border-color:rgba(200,255,0,.35) }
+    .standings-loading { font-family:'DM Mono',monospace; font-size:.65rem; color:var(--muted); padding:20px; text-align:center }
+    @media(max-width:620px){ #standings-panel.open { grid-template-columns:1fr } }
   </style>
 </head>
 <body>
@@ -282,10 +310,8 @@
 
 <main>
   <p class="section-label" id="date-label">Partidos de hoy</p>
-<div id="date-buttons">
-  <button id="today">Hoy</button>
-</div>
-
+  <button class="standings-btn" id="standings-btn" onclick="toggleStandings()">🏆 Clasificación</button>
+  <div id="standings-panel"></div>
   <div id="filter-bar">
     <button class="filter-btn active" data-filter="all"   onclick="setFilter('all')">Todos</button>
     <button class="filter-btn"        data-filter="favs"  onclick="setFilter('favs')">⭐ Favoritos</button>
@@ -436,65 +462,25 @@ function rerender() {
   });
 }
 
-const DAY_FILES = {
-  today:     './data/scoreboard-data.js',
-  yesterday: './data/scoreboard-yesterday.js',
-  tomorrow:  './data/scoreboard-tomorrow.js',
-};
-const DAY_LABELS = { today:'Hoy', yesterday:'Ayer', tomorrow:'Mañana' };
+const DAY_FILES = { today: './data/scoreboard-data.js' };
+const DAY_LABELS = { today:'Hoy' };
 let currentView = 'today';
 
-function setDay(day) {
-  currentView = day;
-  document.querySelectorAll('.day-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.day === day)
-  );
-  clearInterval(fetchInt);
-  if (day === 'today') {
-    fetchInt = setInterval(() => { loadGames(false); startBar(); }, REFRESH);
-  }
-  lastGames = [];
-  loadGames(true);
-}
-
-/* ── URLs raw de GitHub (sin CDN cache) ── */
-const REPO_RAW = 'https://raw.githubusercontent.com/mariano11mora-lab/nba-live-scoreboard/main/';
-
-const DAY_RAW = {
-  today:     REPO_RAW + 'data/scoreboard-data.js',
-  yesterday: REPO_RAW + 'data/scoreboard-yesterday.js',
-  tomorrow:  REPO_RAW + 'data/scoreboard-tomorrow.js',
-};
-
-/* ── Cargar datos desde raw.githubusercontent.com (no tiene CDN cache) ── */
-async function loadLocalScript(src) {
-  // raw.githubusercontent.com tiene CORS abierto y no cachea agresivamente
-  const rawSrc = DAY_RAW[currentView] + '?t=' + Date.now();
-  try {
-    const res = await fetch(rawSrc, { cache: 'no-store' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const text = await res.text();
-    // Ejecutar el JS para definir window.NBA_SCOREBOARD
-    const fn = new Function(text);
-    fn();
-    if (typeof window.NBA_SCOREBOARD === 'undefined') throw new Error('NBA_SCOREBOARD no definido');
-    return window.NBA_SCOREBOARD;
-  } catch(e) {
-    // Fallback: script tag con la URL local
-    return new Promise((resolve, reject) => {
-      const old = document.getElementById('nba-data-script');
-      if (old) old.remove();
-      try { delete window.NBA_SCOREBOARD; } catch(err) {}
-      const script  = document.createElement('script');
-      script.id     = 'nba-data-script';
-      script.src    = src + '?t=' + Date.now() + '&r=' + Math.random();
-      script.onload = () => typeof window.NBA_SCOREBOARD !== 'undefined'
-        ? resolve(window.NBA_SCOREBOARD)
-        : reject(new Error('NBA_SCOREBOARD no definido'));
-      script.onerror = () => reject(new Error('No se pudo cargar ' + src));
-      document.head.appendChild(script);
-    });
-  }
+/* ── Cargar archivo .js local via script tag (sin CORS) ── */
+function loadLocalScript(src) {
+  return new Promise((resolve, reject) => {
+    const old = document.getElementById('nba-data-script');
+    if (old) old.remove();
+    try { delete window.NBA_SCOREBOARD; } catch(e) {}
+    const script  = document.createElement('script');
+    script.id     = 'nba-data-script';
+    script.src    = src + '?t=' + Date.now() + '&r=' + Math.random();
+    script.onload = () => typeof window.NBA_SCOREBOARD !== 'undefined'
+      ? resolve(window.NBA_SCOREBOARD)
+      : reject(new Error('NBA_SCOREBOARD no definido'));
+    script.onerror = () => reject(new Error('No se pudo cargar ' + src));
+    document.head.appendChild(script);
+  });
 }
 
 /* ── Detectar si hay partidos en vivo en los datos ── */
@@ -505,9 +491,9 @@ function hasLiveGames(data) {
 /* ── Proxies para fetch en tiempo real (solo cuando hay partidos live) ── */
 const NBA_LIVE_URL = 'https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json';
 const LIVE_PROXIES = [
-  u => fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(u)),
   u => fetch('https://corsproxy.io/?url=' + encodeURIComponent(u)),
   u => fetch('https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u)),
+  u => fetch('https://cors.x2u.in/' + u),
 ];
 let workingProxy = 0;
 
@@ -535,7 +521,7 @@ async function fetchNBA() {
   if (currentView === 'today' && hasLiveGames(localData)) {
     const liveData = await fetchLiveNow();
     if (liveData) {
-      console.log('Usando datos live en tiempo real');
+      console.log('Live fetch OK via proxy ' + workingProxy);
       return liveData;
     }
     console.warn('Fetch live falló, usando datos locales');
@@ -756,7 +742,7 @@ function renderGames(games, first) {
   } else {
     dateStr = new Date().toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit', year:'numeric'});
   }
-  document.getElementById('date-label').textContent = DAY_LABELS[currentView] + ' · ' + dateStr;
+  document.getElementById('date-label').textContent = 'HOY · ' + dateStr;
 
   document.getElementById('state-wrap').classList.remove('show');
 
@@ -829,12 +815,82 @@ async function loadGames(first=false) {
 loadGames(true);
 startBar();
 clearInterval(fetchInt);
-fetchInt = setInterval(async () => {
-  // Si hay partidos live, refrescar cada 30s; si no, respetar el ciclo normal de 5min
-  // (el cron-job ya dispara cada 2min, así que 30s es solo para el fetch live)
-  loadGames(false);
-  startBar();
-}, REFRESH);
+fetchInt = setInterval(() => { loadGames(false); startBar(); }, REFRESH);
+
+/* ══════════════════════════════════════
+   STANDINGS — Clasificación de conferencias
+══════════════════════════════════════ */
+let standingsOpen = false;
+let standingsCache = null;
+
+async function fetchStandings() {
+  // Usar nba_api standings desde el archivo estático generado por el workflow
+  try {
+    const script = document.createElement('script');
+    script.id = 'standings-script';
+    const old = document.getElementById('standings-script');
+    if (old) old.remove();
+    if (window.NBA_STANDINGS) delete window.NBA_STANDINGS;
+
+    return new Promise((resolve) => {
+      script.src = './data/standings.js?t=' + Date.now() + '&r=' + Math.random();
+      script.onload = () => resolve(window.NBA_STANDINGS ?? null);
+      script.onerror = () => resolve(null);
+      document.head.appendChild(script);
+    });
+  } catch(e) { return null; }
+}
+
+function buildStandingsTable(teams, title) {
+  if (!teams || !teams.length) return `<div class="standings-conf"><div class="standings-conf-title">${title}</div><div class="standings-loading">Sin datos</div></div>`;
+  const rows = teams.map((t, i) => {
+    const playoffLine = i === 5 ? ' class="playoff-line"' : '';
+    return `<tr${playoffLine}>
+      <td><span class="td-team"><span class="td-rank">${i+1}</span>${t.tricode}</span></td>
+      <td>${t.wins}</td><td>${t.losses}</td>
+      <td>${t.pct}</td><td class="td-gb">${t.gb}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="standings-conf">
+    <div class="standings-conf-title">${title}</div>
+    <table class="standings-table">
+      <thead><tr><th>Equipo</th><th>W</th><th>L</th><th>%</th><th>GB</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+async function toggleStandings() {
+  standingsOpen = !standingsOpen;
+  const panel = document.getElementById('standings-panel');
+  const btn   = document.getElementById('standings-btn');
+
+  if (!standingsOpen) {
+    panel.classList.remove('open');
+    btn.classList.remove('open');
+    btn.textContent = '🏆 Clasificación';
+    return;
+  }
+
+  btn.classList.add('open');
+  btn.textContent = '✕ Cerrar';
+  panel.classList.add('open');
+  panel.innerHTML = '<div class="standings-loading">Cargando clasificación…</div>';
+
+  // Usar cache si está disponible
+  if (!standingsCache) {
+    standingsCache = await fetchStandings();
+  }
+
+  if (!standingsCache) {
+    panel.innerHTML = '<div class="standings-loading" style="color:#ff6b6b">No se pudo cargar la clasificación.</div>';
+    return;
+  }
+
+  const east = buildStandingsTable(standingsCache.east, 'Conferencia Este');
+  const west = buildStandingsTable(standingsCache.west, 'Conferencia Oeste');
+  panel.innerHTML = east + west;
+}
 </script>
 </body>
 </html>

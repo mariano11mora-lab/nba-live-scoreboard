@@ -84,3 +84,38 @@ except Exception as e:
 today = datetime.now(timezone.utc).date()
 fetch_by_date(str(today - timedelta(days=1)), 'data/scoreboard-yesterday.js')
 fetch_by_date(str(today + timedelta(days=1)), 'data/scoreboard-tomorrow.js')
+
+# ── STANDINGS ──
+try:
+    from nba_api.stats.endpoints import leaguestandingsv3
+    st = leaguestandingsv3.LeagueStandingsV3(league_id='00', season_type='Regular Season')
+    data = st.get_dict()
+    rs = next(r for r in data['resultSets'] if r['name'] == 'Standings')
+    h = rs['headers']
+
+    east, west = [], []
+    for row in rs['rowSet']:
+        r = dict(zip(h, row))
+        team = {
+            'tricode': r['TeamAbbreviation'],
+            'name':    r['TeamName'],
+            'wins':    r['WINS'],
+            'losses':  r['LOSSES'],
+            'pct':     f"{float(r['WinPCT']):.3f}",
+            'gb':      r['ConferenceGamesBack'] or '—',
+        }
+        if r['Conference'] == 'East':
+            east.append(team)
+        else:
+            west.append(team)
+
+    standings = {
+        'east': sorted(east, key=lambda x: (-x['wins'], x['losses'])),
+        'west': sorted(west, key=lambda x: (-x['wins'], x['losses'])),
+        'updated': datetime.now(timezone.utc).isoformat()
+    }
+    with open('data/standings.js', 'w') as f:
+        f.write('var NBA_STANDINGS = ' + json.dumps(standings) + ';')
+    print(f"OK: standings — {len(east)} East, {len(west)} West")
+except Exception as e:
+    print(f"Standings error: {e}")
