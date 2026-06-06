@@ -1,1 +1,1 @@
-var NBA_SCOREBOARD = {"scoreboard": {"gameDate": "2026-06-04", "games": []}, "fetched_at": "2026-06-05T13:26:18.524384+00:00"};
+var NBA_SCOREBOARD = {"scoreboard": {"gameDate": "2026-06-05", "games": [{"gameId": "0042500402", "gameStatus": 1, "gameTimeUTC": "2026-06-05T00:00:00", "period": 0, "gameClock": "", "awayScore": 0, "homeScore": 0, "awayPeriods": [], "homePeriods": [], "awayTeam": {"teamTricode": "NYK", "score": 0, "wins": 0, "losses": 0, "periods": []}, "homeTeam": {}, "gameEt": "2026-06-05T00:00:00"}]}, "fetched_at": "2026-06-06T12:17:01.077897+00:00"};
