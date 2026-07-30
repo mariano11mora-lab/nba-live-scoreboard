@@ -1,1 +1,1 @@
-var NBA_SCOREBOARD = {"scoreboard": {"gameDate": "2026-07-29", "games": []}, "fetched_at": "2026-07-30T16:20:22.321997+00:00"};
+var NBA_SCOREBOARD = {"scoreboard": {"gameDate": "2026-07-29", "games": []}, "fetched_at": "2026-07-30T21:48:11.055213+00:00"};
